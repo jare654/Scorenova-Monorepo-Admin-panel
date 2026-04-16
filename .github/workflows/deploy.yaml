@@ -7,16 +7,26 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
         run: npm install
 
-      - name: Build Project
-        run: npm run build # This creates the 'dist' or 'build' folder
+      - name: Build Next.js
+        run: npm run build
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Deploy to Vercel
-        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        # For Next.js, we don't use --prebuilt here to let Vercel optimize the final step
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
