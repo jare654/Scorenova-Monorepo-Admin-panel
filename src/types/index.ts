@@ -63,3 +63,4 @@ export interface AdminUser {
   role: "Super Admin" | "Content Manager" | "Support";
   lastLogin: string;
 }
+

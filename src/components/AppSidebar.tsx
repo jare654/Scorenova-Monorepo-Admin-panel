@@ -35,10 +35,15 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
     <aside
       className={cn(
         "fixed left-0 top-0 z-40 h-screen bg-sidebar text-sidebar-foreground transition-all duration-300 flex flex-col",
-        collapsed ? "w-16" : "w-64"
+        collapsed ? "w-16" : "w-64",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 h-16 border-b border-sidebar-border", collapsed && "justify-center")}>
+      <div
+        className={cn(
+          "flex items-center gap-3 px-4 h-16 border-b border-sidebar-border",
+          collapsed && "justify-center",
+        )}
+      >
         <GraduationCap className="h-8 w-8 text-accent shrink-0" />
         {!collapsed && (
           <div className="overflow-hidden">
@@ -50,7 +55,9 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
 
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto scrollbar-thin">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + "/");
+          const isActive =
+            location.pathname === item.path ||
+            location.pathname.startsWith(item.path + "/");
           return (
             <Link
               key={item.path}
@@ -60,7 +67,7 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
                 isActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                collapsed && "justify-center px-2"
+                collapsed && "justify-center px-2",
               )}
               title={collapsed ? item.title : undefined}
             >
@@ -78,10 +85,15 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
           onClick={onToggle}
           className={cn(
             "w-full text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-            collapsed && "justify-center"
+            collapsed && "justify-center",
           )}
         >
-          <ChevronLeft className={cn("h-5 w-5 transition-transform", collapsed && "rotate-180")} />
+          <ChevronLeft
+            className={cn(
+              "h-5 w-5 transition-transform",
+              collapsed && "rotate-180",
+            )}
+          />
         </Button>
       </div>
     </aside>
@@ -89,3 +101,4 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
 };
 
 export default AppSidebar;
+

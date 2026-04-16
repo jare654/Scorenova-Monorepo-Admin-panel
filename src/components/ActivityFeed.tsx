@@ -38,3 +38,4 @@ const ActivityFeed = ({ items }: ActivityFeedProps) => {
 };
 
 export default ActivityFeed;
+

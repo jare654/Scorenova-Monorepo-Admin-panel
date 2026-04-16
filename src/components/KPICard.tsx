@@ -43,3 +43,4 @@ const KPICard = ({ title, value, trend, trendLabel, icon: Icon, iconColor = "tex
 };
 
 export default KPICard;
+

@@ -8,3 +8,4 @@ export default createLovableConfig({
   //   baseURL: 'http://localhost:3000',
   // },
 });
+

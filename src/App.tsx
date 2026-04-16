@@ -13,32 +13,48 @@ import AIUsagePage from "@/pages/AIUsagePage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
+import NotificationsPage from "./pages/NotificationsPage";
+import { NotificationProvider } from "./components/ui/NotificationContext";
+import AdminProfilePage from "./pages/AdminProfilePage";
+import LoginPage from "./pages/LoginPage";
+import { AuthProvider } from "./components/auth/context/AuthContext";
+import ProtectedRoute from "./components/auth/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route element={<DashboardLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/questions" element={<QuestionsPage />} />
-            <Route path="/questions/new" element={<AddQuestionPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/payments" element={<PaymentsPage />} />
-            <Route path="/ai-usage" element={<AIUsagePage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <NotificationProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route element={<DashboardLayout />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/questions" element={<QuestionsPage />} />
+                <Route path="/questions/new" element={<AddQuestionPage />} />
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/payments" element={<PaymentsPage />} />
+                <Route path="/ai-usage" element={<AIUsagePage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/admin-profile" element={<AdminProfilePage />} />
+                <Route
+                  path="/notifications"
+                  element={<NotificationsPage />}
+                />{" "}
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </NotificationProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </AuthProvider>
 );
 
 export default App;
