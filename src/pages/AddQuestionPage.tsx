@@ -118,17 +118,28 @@ const AddQuestionPage = () => {
   const [loading, setLoading] = useState(false);
 
   const [grades, setGrades] = useState<{ id: string; name: string }[]>([]);
-  const [subjects, setSubjects] = useState<
-    { id: string; name: string; gradeId: string }[]
-  >([]);
-  const [topics, setTopics] = useState<
-    { id: string; name: string; subjectId: string }[]
-  >([]);
+  type Subject = {
+    id: string;
+    name: string;
+    gradeId: string;
+  };
+
+  type Topic = {
+    id: string;
+    name: string;
+    subjectId: string;
+  };
+
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
 
   const [gradeDialog, setGradeDialog] = useState(false);
   const [subjectDialog, setSubjectDialog] = useState(false);
   const [topicDialog, setTopicDialog] = useState(false);
   const [dialogLoading, setDialogLoading] = useState(false);
+
+  // Track if we've already prefilled to avoid repeated runs
+  const [prefilled, setPrefilled] = useState(false);
 
   // ── Fetch grades on mount
   useEffect(() => {
@@ -151,12 +162,14 @@ const AddQuestionPage = () => {
     fetchGrades();
   }, [token]);
 
-  // ── Fetch subjects when grade changes
+  // ── Fetch subjects when grade changes (skip reset when editing and prefilling)
   useEffect(() => {
     if (!gradeId) {
       setSubjects([]);
-      setSubjectId("");
-      setTopicId("");
+      if (!isEditMode) {
+        setSubjectId("");
+        setTopicId("");
+      }
       return;
     }
     const fetchSubjects = async () => {
@@ -167,8 +180,11 @@ const AddQuestionPage = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setSubjects(Array.isArray(json) ? json : (json.data ?? []));
-        setSubjectId("");
-        setTopicId("");
+        // Only reset subject/topic if NOT in edit mode prefill
+        if (!isEditMode || prefilled) {
+          setSubjectId("");
+          setTopicId("");
+        }
       } catch {
         toast({
           title: "Error",
@@ -184,7 +200,7 @@ const AddQuestionPage = () => {
   useEffect(() => {
     if (!subjectId) {
       setTopics([]);
-      setTopicId("");
+      if (!isEditMode || prefilled) setTopicId("");
       return;
     }
     const fetchTopics = async () => {
@@ -195,7 +211,7 @@ const AddQuestionPage = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setTopics(Array.isArray(json) ? json : (json.data ?? []));
-        setTopicId("");
+        if (!isEditMode || prefilled) setTopicId("");
       } catch {
         toast({
           title: "Error",
@@ -207,58 +223,79 @@ const AddQuestionPage = () => {
     fetchTopics();
   }, [subjectId, token]);
 
+  // ── Prefill form when editing
+  // Step 1: fill text/options/difficulty/explanation immediately from state
   useEffect(() => {
-    if (!editingQuestion) return;
+    if (!isEditMode || !editingQuestion) return;
 
-    const fetchFullQuestion = async () => {
+    // ✅ Fix: capitalize first letter to match Select values (Easy/Medium/Hard)
+    const cap = (s: string) =>
+      s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+    setQuestionText(editingQuestion.text ?? "");
+    setOptions(
+      Array.isArray(editingQuestion.options) &&
+        editingQuestion.options.length === 4
+        ? editingQuestion.options
+        : ["", "", "", ""],
+    );
+    setDifficulty(
+      editingQuestion.difficulty ? cap(editingQuestion.difficulty) : "",
+    );
+    setExplanation(editingQuestion.explanation ?? "");
+
+    if (
+      editingQuestion.correctAnswer &&
+      Array.isArray(editingQuestion.options)
+    ) {
+      const idx = editingQuestion.options.indexOf(
+        editingQuestion.correctAnswer,
+      );
+      setCorrectAnswer(idx >= 0 ? String(idx) : "0");
+    }
+  }, [isEditMode, editingQuestion]);
+
+  // Step 2: once grades load, find which grade owns the subjectId
+  useEffect(() => {
+    if (!isEditMode || !editingQuestion || grades.length === 0 || prefilled)
+      return;
+
+    const resolveGrade = async () => {
       try {
-        const res = await fetch(
-          `${API_URL}/questions/${editingQuestion.id}/edit`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
-
-        // Fill form
-        setQuestionText(data.text);
-        setOptions(data.options);
-        setExplanation(data.explanation || "");
-        setDifficulty(data.difficulty);
-        setSubjectId(data.subjectId);
-        setTopicId(data.topicId || "");
-
-        // set correct answer index
-        const correctIndex = data.options.findIndex(
-          (opt: string) => opt === data.correctAnswer,
-        );
-        setCorrectAnswer(String(correctIndex));
+        for (const g of grades) {
+          const res = await fetch(`${API_URL}/subjects?gradeId=${g.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) continue;
+          const json = await res.json();
+          const arr = Array.isArray(json) ? json : (json.data ?? []);
+          const found = arr.find(
+            (s: any) => s.id === editingQuestion.subjectId,
+          );
+          if (found) {
+            setGradeId(g.id); // triggers subject fetch
+            break;
+          }
+        }
       } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load question details.",
-          variant: "destructive",
-        });
+        console.error("Failed to resolve grade");
       }
     };
 
-    fetchFullQuestion();
-  }, [editingQuestion, token]);
+    resolveGrade();
+  }, [isEditMode, grades]);
 
+  // Step 3: once subjects load and we're in edit mode, set subjectId and topicId
   useEffect(() => {
-    if (!editingQuestion || !subjects.length) return;
+    if (!isEditMode || !editingQuestion || subjects.length === 0 || prefilled)
+      return;
+    const found = subjects.find((s) => s.id === editingQuestion.subjectId);
+    if (!found) return;
 
-    const subject = subjects.find((s) => s.id === editingQuestion.subjectId);
-
-    if (subject) {
-      setGradeId(subject.gradeId);
-    }
-  }, [subjects, editingQuestion]);
+    setSubjectId(editingQuestion.subjectId);
+    if (editingQuestion.topicId) setTopicId(editingQuestion.topicId);
+    setPrefilled(true); // mark done so we stop interfering
+  }, [isEditMode, subjects]);
 
   // ── Create Grade
   const handleCreateGrade = async (name: string, description: string) => {
@@ -424,15 +461,16 @@ const AddQuestionPage = () => {
         text: questionText,
         options,
         correctAnswer: options[parseInt(correctAnswer)],
-        difficulty: difficulty.toLowerCase(),
+        difficulty: difficulty.toLowerCase(), // API expects lowercase
         explanation,
       };
 
+      // ✅ Fix: use PUT for edit, POST for create
       const url = isEditMode
         ? `${API_URL}/questions/${editingQuestion.id}`
         : `${API_URL}/questions`;
 
-      const method = isEditMode ? "PATCH" : "POST";
+      const method = isEditMode ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -445,7 +483,11 @@ const AddQuestionPage = () => {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || `HTTP ${res.status}`);
+        throw new Error(
+          Array.isArray(errorData.message)
+            ? errorData.message.join(", ")
+            : errorData.message || `HTTP ${res.status}`,
+        );
       }
 
       toast({
@@ -486,7 +528,8 @@ const AddQuestionPage = () => {
               <>Saving...</>
             ) : (
               <>
-                <Save className="h-4 w-4 mr-1" /> Save
+                <Save className="h-4 w-4 mr-1" />
+                {isEditMode ? "Update" : "Save"}
               </>
             )}
           </Button>
