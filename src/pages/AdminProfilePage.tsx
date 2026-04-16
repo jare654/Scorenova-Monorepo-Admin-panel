@@ -132,7 +132,11 @@ const AdminProfilePage = () => {
                 Two-factor authentication is currently{" "}
                 <span className="text-green-600 font-bold">Enabled</span>.
               </p>
-              <Button variant="link" className="p-0 h-auto text-xs">
+              <Button
+                variant="link"
+                onClick={() => navigate("/change-password")}
+                className="p-0 h-auto text-xs"
+              >
                 Change Password
               </Button>
             </div>

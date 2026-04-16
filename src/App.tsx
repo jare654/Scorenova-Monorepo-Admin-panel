@@ -19,6 +19,7 @@ import AdminProfilePage from "./pages/AdminProfilePage";
 import LoginPage from "./pages/LoginPage";
 import { AuthProvider } from "./components/auth/context/AuthContext";
 import ProtectedRoute from "./components/auth/components/ProtectedRoute";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ const App = () => (
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/admin-profile" element={<AdminProfilePage />} />
+                <Route path="/change-password" element={<ChangePasswordPage />} />
                 <Route
                   path="/notifications"
                   element={<NotificationsPage />}

@@ -225,77 +225,70 @@ const AddQuestionPage = () => {
 
   // ── Prefill form when editing
   // Step 1: fill text/options/difficulty/explanation immediately from state
+  // ─────────────────────────────────────────────────────────
+  // SAFE EDIT PREFILL LOGIC (FIXED)
+  // ─────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!isEditMode || !editingQuestion) return;
 
-    // ✅ Fix: capitalize first letter to match Select values (Easy/Medium/Hard)
-    const cap = (s: string) =>
-      s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-
     setQuestionText(editingQuestion.text ?? "");
     setOptions(
-      Array.isArray(editingQuestion.options) &&
-        editingQuestion.options.length === 4
+      Array.isArray(editingQuestion.options)
         ? editingQuestion.options
         : ["", "", "", ""],
     );
     setDifficulty(
-      editingQuestion.difficulty ? cap(editingQuestion.difficulty) : "",
+      editingQuestion.difficulty
+        ? editingQuestion.difficulty.charAt(0).toUpperCase() +
+            editingQuestion.difficulty.slice(1).toLowerCase()
+        : "",
     );
     setExplanation(editingQuestion.explanation ?? "");
 
-    if (
-      editingQuestion.correctAnswer &&
-      Array.isArray(editingQuestion.options)
-    ) {
+    if (Array.isArray(editingQuestion.options)) {
       const idx = editingQuestion.options.indexOf(
         editingQuestion.correctAnswer,
       );
-      setCorrectAnswer(idx >= 0 ? String(idx) : "0");
+      if (idx >= 0) setCorrectAnswer(String(idx));
     }
   }, [isEditMode, editingQuestion]);
 
-  // Step 2: once grades load, find which grade owns the subjectId
+  // map grade → subject → topic safely AFTER data loads
   useEffect(() => {
-    if (!isEditMode || !editingQuestion || grades.length === 0 || prefilled)
-      return;
+    if (!isEditMode || !editingQuestion) return;
+    if (!grades.length) return;
 
-    const resolveGrade = async () => {
-      try {
-        for (const g of grades) {
-          const res = await fetch(`${API_URL}/subjects?gradeId=${g.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) continue;
-          const json = await res.json();
-          const arr = Array.isArray(json) ? json : (json.data ?? []);
-          const found = arr.find(
-            (s: any) => s.id === editingQuestion.subjectId,
-          );
-          if (found) {
-            setGradeId(g.id); // triggers subject fetch
-            break;
-          }
-        }
-      } catch {
-        console.error("Failed to resolve grade");
-      }
-    };
+    const gradeMatch = grades.find((g) => g.name === editingQuestion.gradeName);
 
-    resolveGrade();
-  }, [isEditMode, grades]);
+    if (gradeMatch) {
+      setGradeId(gradeMatch.id);
+    }
+  }, [grades, isEditMode, editingQuestion]);
 
-  // Step 3: once subjects load and we're in edit mode, set subjectId and topicId
   useEffect(() => {
-    if (!isEditMode || !editingQuestion || subjects.length === 0 || prefilled)
-      return;
-    const found = subjects.find((s) => s.id === editingQuestion.subjectId);
-    if (!found) return;
+    if (!isEditMode || !editingQuestion) return;
+    if (!subjects.length) return;
 
-    setSubjectId(editingQuestion.subjectId);
-    if (editingQuestion.topicId) setTopicId(editingQuestion.topicId);
-    setPrefilled(true); // mark done so we stop interfering
-  }, [isEditMode, subjects]);
+    const subjectMatch = subjects.find(
+      (s) => s.name === editingQuestion.subjectName,
+    );
+
+    if (subjectMatch) {
+      setSubjectId(subjectMatch.id);
+    }
+  }, [subjects, isEditMode, editingQuestion]);
+
+  useEffect(() => {
+    if (!isEditMode || !editingQuestion) return;
+    if (!topics.length) return;
+
+    const topicMatch = topics.find((t) => t.name === editingQuestion.topicName);
+
+    if (topicMatch) {
+      setTopicId(topicMatch.id);
+    }
+  }, [topics, isEditMode, editingQuestion]);
 
   // ── Create Grade
   const handleCreateGrade = async (name: string, description: string) => {
