@@ -22,15 +22,28 @@ import {
 import { Plus, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const SettingsPage = () => {
-  const API_URL = "https://learnova-backen.onrender.com/api/v1";
+const API_URL = "https://learnova-backen.onrender.com/api/v1";
 
+const SettingsPage = () => {
   const { toast } = useToast();
+
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [aiScanner, setAiScanner] = useState(true);
-  const [mockExams, setMockExams] = useState(true);
+
+  // ── Feature toggles — from backend
+  const [mockExams, setMockExams] = useState(false);
   const [shortAnswer, setShortAnswer] = useState(false);
-  const [contentModeration, setContentModeration] = useState(true);
+  const [contentModeration, setContentModeration] = useState(false);
+
+  // ── Milestone notification — from backend
+  const [userMilestones, setUserMilestones] = useState(false);
+  const [milestoneLoading, setMilestoneLoading] = useState(false);
+
+  // ── Other notification toggles — local only
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [dailyReports, setDailyReports] = useState(true);
+  const [paymentAlerts, setPaymentAlerts] = useState(true);
+
   const [admins, setAdmins] = useState<any[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
 
@@ -45,14 +58,15 @@ const SettingsPage = () => {
   const [addLoading, setAddLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
+  const getToken = () => localStorage.getItem("token");
+
+  // ── Fetch admins
   useEffect(() => {
     const fetchAdmins = async () => {
       setLoadingAdmins(true);
       try {
         const res = await fetch(`${API_URL}/accounts/get-accounts`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+          headers: { Authorization: `Bearer ${getToken()}` },
         });
         const json = await res.json();
         const adminList = (json?.data || []).filter(
@@ -67,6 +81,111 @@ const SettingsPage = () => {
     };
     fetchAdmins();
   }, []);
+
+  // ── Fetch feature toggles on mount
+  useEffect(() => {
+    const fetchToggles = async () => {
+      try {
+        const res = await fetch(`${API_URL}/admin/feature-toggles/status`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        setMockExams(json.mockExams ?? false);
+        setShortAnswer(json.shortAnswerQuestions ?? false);
+        setContentModeration(json.contentModeration ?? false);
+      } catch {
+        console.error("Failed to fetch feature toggles");
+      }
+    };
+    fetchToggles();
+  }, []);
+
+  // ── Fetch milestone notification status on mount
+  useEffect(() => {
+    const fetchMilestoneStatus = async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/notifications/admin/milestone-notifications/status`,
+          { headers: { Authorization: `Bearer ${getToken()}` } },
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        setUserMilestones(json.isEnabled ?? false);
+      } catch {
+        console.error("Failed to fetch milestone notification status");
+      }
+    };
+    fetchMilestoneStatus();
+  }, []);
+
+  // ── Toggle feature handler
+  const handleToggleFeature = async (
+    feature: "mockExams" | "shortAnswerQuestions" | "contentModeration",
+    newValue: boolean,
+    setter: (v: boolean) => void,
+  ) => {
+    setter(newValue); // optimistic
+    try {
+      const res = await fetch(`${API_URL}/admin/feature-toggles/toggle`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ feature, isEnabled: newValue }),
+      });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setMockExams(json.mockExams ?? false);
+      setShortAnswer(json.shortAnswerQuestions ?? false);
+      setContentModeration(json.contentModeration ?? false);
+      toast({
+        title: "Updated",
+        description: `Feature ${newValue ? "enabled" : "disabled"} successfully.`,
+      });
+    } catch {
+      setter(!newValue); // revert
+      toast({
+        title: "Error",
+        description: "Failed to update feature. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ── Toggle milestone notification handler
+  const handleToggleMilestone = async (newValue: boolean) => {
+    setUserMilestones(newValue); // optimistic
+    setMilestoneLoading(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/notifications/admin/milestone-notifications/toggle`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      );
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setUserMilestones(json.isEnabled ?? newValue);
+      toast({
+        title: "Updated",
+        description:
+          json.message ||
+          `Milestone notifications ${json.isEnabled ? "enabled" : "disabled"}.`,
+      });
+    } catch {
+      setUserMilestones(!newValue); // revert
+      toast({
+        title: "Error",
+        description: "Failed to update milestone notifications.",
+        variant: "destructive",
+      });
+    } finally {
+      setMilestoneLoading(false);
+    }
+  };
 
   const handleSave = () => {
     toast({
@@ -104,9 +223,7 @@ const SettingsPage = () => {
       });
       return;
     }
-
     setAddLoading(true);
-    // Backend connection will be added later
     setTimeout(() => {
       toast({
         title: "Admin Created",
@@ -130,6 +247,7 @@ const SettingsPage = () => {
           <TabsTrigger value="roles">Admin Roles</TabsTrigger>
         </TabsList>
 
+        {/* General */}
         <TabsContent value="general" className="space-y-6">
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">General Settings</h3>
@@ -168,6 +286,7 @@ const SettingsPage = () => {
           </div>
         </TabsContent>
 
+        {/* Content */}
         <TabsContent value="content" className="space-y-6">
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">Feature Toggles</h3>
@@ -177,24 +296,28 @@ const SettingsPage = () => {
                 desc: "Allow users to scan questions using camera",
                 state: aiScanner,
                 set: setAiScanner,
+                feature: null,
               },
               {
                 label: "Enable Mock Exams",
                 desc: "Enable timed mock exam functionality",
                 state: mockExams,
                 set: setMockExams,
+                feature: "mockExams" as const,
               },
               {
                 label: "Enable Short Answer Questions",
                 desc: "Allow open-ended question types",
                 state: shortAnswer,
                 set: setShortAnswer,
+                feature: "shortAnswerQuestions" as const,
               },
               {
                 label: "Content Moderation",
                 desc: "Auto-review user-generated content",
                 state: contentModeration,
                 set: setContentModeration,
+                feature: "contentModeration" as const,
               },
             ].map((item) => (
               <div
@@ -205,13 +328,23 @@ const SettingsPage = () => {
                   <p className="text-sm font-medium">{item.label}</p>
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
                 </div>
-                <Switch checked={item.state} onCheckedChange={item.set} />
+                <Switch
+                  checked={item.state}
+                  onCheckedChange={(v) => {
+                    if (item.feature) {
+                      handleToggleFeature(item.feature, v, item.set);
+                    } else {
+                      item.set(v);
+                    }
+                  }}
+                />
               </div>
             ))}
             <Button onClick={handleSave}>Save Changes</Button>
           </div>
         </TabsContent>
 
+        {/* AI */}
         <TabsContent value="ai" className="space-y-6">
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">AI Configuration</h3>
@@ -254,6 +387,7 @@ const SettingsPage = () => {
           </div>
         </TabsContent>
 
+        {/* Payments */}
         <TabsContent value="payments" className="space-y-6">
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">Payment Configuration</h3>
@@ -275,19 +409,29 @@ const SettingsPage = () => {
           </div>
         </TabsContent>
 
+        {/* Notifications */}
         <TabsContent value="notifications" className="space-y-6">
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">Notification Settings</h3>
+            {/* Local-only toggles */}
             {[
               {
                 label: "Email Notifications",
                 desc: "Receive email alerts for important events",
+                state: emailNotifications,
+                set: setEmailNotifications,
               },
-              { label: "Daily Reports", desc: "Get daily summary emails" },
-              { label: "Payment Alerts", desc: "Notify on failed payments" },
               {
-                label: "User Milestones",
-                desc: "Alert when users hit 1000 questions",
+                label: "Daily Reports",
+                desc: "Get daily summary emails",
+                state: dailyReports,
+                set: setDailyReports,
+              },
+              {
+                label: "Payment Alerts",
+                desc: "Notify on failed payments",
+                state: paymentAlerts,
+                set: setPaymentAlerts,
               },
             ].map((item) => (
               <div
@@ -298,13 +442,30 @@ const SettingsPage = () => {
                   <p className="text-sm font-medium">{item.label}</p>
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={item.state} onCheckedChange={item.set} />
               </div>
             ))}
+
+            {/* User Milestones — connected to backend */}
+            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+              <div>
+                <p className="text-sm font-medium">User Milestones</p>
+                <p className="text-xs text-muted-foreground">
+                  Alert when users hit 1000 questions
+                </p>
+              </div>
+              <Switch
+                checked={userMilestones}
+                disabled={milestoneLoading}
+                onCheckedChange={handleToggleMilestone}
+              />
+            </div>
+
             <Button onClick={handleSave}>Save Changes</Button>
           </div>
         </TabsContent>
 
+        {/* Admin Roles */}
         <TabsContent value="roles" className="space-y-6">
           <div className="bg-card rounded-lg border shadow-sm">
             <div className="p-4 border-b flex items-center justify-between">
@@ -393,9 +554,7 @@ const SettingsPage = () => {
           <DialogHeader>
             <DialogTitle>Add New Admin</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 py-2">
-            {/* Name */}
             <div>
               <Label>Full Name *</Label>
               <Input
@@ -410,8 +569,6 @@ const SettingsPage = () => {
                 </p>
               )}
             </div>
-
-            {/* Phone */}
             <div>
               <Label>Phone Number *</Label>
               <Input
@@ -435,8 +592,6 @@ const SettingsPage = () => {
                 </p>
               )}
             </div>
-
-            {/* Email (optional) */}
             <div>
               <Label>
                 Email{" "}
@@ -451,8 +606,6 @@ const SettingsPage = () => {
                 onChange={(e) => setAdminEmail(e.target.value)}
               />
             </div>
-
-            {/* Role */}
             <div>
               <Label>Role *</Label>
               <Select value={adminRole} onValueChange={setAdminRole}>
@@ -468,8 +621,6 @@ const SettingsPage = () => {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Password */}
             <div>
               <Label>Password *</Label>
               <div className="relative">
@@ -499,7 +650,6 @@ const SettingsPage = () => {
               )}
             </div>
           </div>
-
           <DialogFooter>
             <Button
               variant="outline"
