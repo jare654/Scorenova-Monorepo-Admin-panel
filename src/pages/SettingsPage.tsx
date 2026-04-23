@@ -12,8 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, AlertTriangle } from "lucide-react";
-import { adminUsers } from "@/data/mockData";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Plus, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const SettingsPage = () => {
@@ -28,6 +34,17 @@ const SettingsPage = () => {
   const [admins, setAdmins] = useState<any[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
 
+  // Add Admin dialog state
+  const [addAdminOpen, setAddAdminOpen] = useState(false);
+  const [adminName, setAdminName] = useState("");
+  const [adminPhone, setAdminPhone] = useState("+251");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminRole, setAdminRole] = useState("admin");
+  const [showPassword, setShowPassword] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     const fetchAdmins = async () => {
       setLoadingAdmins(true);
@@ -37,22 +54,17 @@ const SettingsPage = () => {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         });
-
         const json = await res.json();
-
-        // ✅ filter NON-students (admins, etc.)
-        const adminUsers = (json?.data || []).filter(
+        const adminList = (json?.data || []).filter(
           (u: any) => u.type !== "student",
         );
-
-        setAdmins(adminUsers);
-      } catch (err) {
+        setAdmins(adminList);
+      } catch {
         console.error("Failed to fetch admins");
       } finally {
         setLoadingAdmins(false);
       }
     };
-
     fetchAdmins();
   }, []);
 
@@ -61,6 +73,49 @@ const SettingsPage = () => {
       title: "Settings Saved",
       description: "Your changes have been saved successfully.",
     });
+  };
+
+  const resetAddAdminForm = () => {
+    setAdminName("");
+    setAdminPhone("+251");
+    setAdminEmail("");
+    setAdminPassword("");
+    setAdminRole("admin");
+    setShowPassword(false);
+    setFormErrors({});
+  };
+
+  const validateAdminForm = () => {
+    const errors: Record<string, boolean> = {};
+    if (!adminName.trim()) errors.name = true;
+    if (!adminPhone.trim() || adminPhone === "+251") errors.phone = true;
+    if (!adminPassword.trim() || adminPassword.length < 8)
+      errors.password = true;
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAddAdmin = async () => {
+    if (!validateAdminForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields correctly.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAddLoading(true);
+    // Backend connection will be added later
+    setTimeout(() => {
+      toast({
+        title: "Admin Created",
+        description: `${adminName} has been added as ${adminRole}.`,
+      });
+      setAddAdminOpen(false);
+      resetAddAdminForm();
+      setAddLoading(false);
+    }, 500);
   };
 
   return (
@@ -254,7 +309,13 @@ const SettingsPage = () => {
           <div className="bg-card rounded-lg border shadow-sm">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold">Admin Users</h3>
-              <Button size="sm">
+              <Button
+                size="sm"
+                onClick={() => {
+                  resetAddAdminForm();
+                  setAddAdminOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4 mr-1" /> Add Admin
               </Button>
             </div>
@@ -304,9 +365,11 @@ const SettingsPage = () => {
                       <td className="p-3">
                         <Badge variant="outline">{admin.type}</Badge>
                       </td>
-                      {admin.lastActiveAt
-                        ? new Date(admin.lastActiveAt).toLocaleDateString()
-                        : "—"}
+                      <td className="p-3 text-muted-foreground">
+                        {admin.lastActiveAt
+                          ? new Date(admin.lastActiveAt).toLocaleDateString()
+                          : "—"}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -315,6 +378,145 @@ const SettingsPage = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Add Admin Dialog */}
+      <Dialog
+        open={addAdminOpen}
+        onOpenChange={(v) => {
+          if (!v) {
+            setAddAdminOpen(false);
+            resetAddAdminForm();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Admin</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Name */}
+            <div>
+              <Label>Full Name *</Label>
+              <Input
+                placeholder="e.g. John Doe"
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+                className={formErrors.name ? "border-destructive" : ""}
+              />
+              {formErrors.name && (
+                <p className="text-xs text-destructive mt-1">
+                  Name is required
+                </p>
+              )}
+            </div>
+
+            {/* Phone */}
+            <div>
+              <Label>Phone Number *</Label>
+              <Input
+                type="tel"
+                placeholder="+251XXXXXXXXX"
+                value={adminPhone}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!raw.startsWith("+251")) {
+                    setAdminPhone("+251");
+                    return;
+                  }
+                  const afterPrefix = raw.slice(4).replace(/\D/g, "");
+                  setAdminPhone("+251" + afterPrefix);
+                }}
+                className={formErrors.phone ? "border-destructive" : ""}
+              />
+              {formErrors.phone && (
+                <p className="text-xs text-destructive mt-1">
+                  Valid phone number is required
+                </p>
+              )}
+            </div>
+
+            {/* Email (optional) */}
+            <div>
+              <Label>
+                Email{" "}
+                <span className="text-muted-foreground text-xs">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                type="email"
+                placeholder="admin@example.com"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+              />
+            </div>
+
+            {/* Role */}
+            <div>
+              <Label>Role *</Label>
+              <Select value={adminRole} onValueChange={setAdminRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
+                  <SelectItem value="content_manager">
+                    Content Manager
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Password */}
+            <div>
+              <Label>Password *</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Min. 8 characters"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className={`pr-10 ${formErrors.password ? "border-destructive" : ""}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {formErrors.password && (
+                <p className="text-xs text-destructive mt-1">
+                  Password must be at least 8 characters
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddAdminOpen(false);
+                resetAddAdminForm();
+              }}
+              disabled={addLoading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleAddAdmin} disabled={addLoading}>
+              {addLoading ? "Creating..." : "Create Admin"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
