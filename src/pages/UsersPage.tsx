@@ -1,16 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  Search,
-  Eye,
-  X,
-  Crown,
-  Key,
-  Mail,
-  Ban,
-  TrendingUp,
-  TrendingDown,
-  Loader2,
-} from "lucide-react";
+import { Search, Eye, X, Crown, Key, Mail, Ban, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import type { User } from "@/types";
 import { cn } from "@/lib/utils";
 
 const API_URL = "https://learnova-backen.onrender.com/api/v1";
@@ -37,15 +25,27 @@ type AccountUser = {
   type: string;
   isActive: boolean;
   gender: string;
+  status: string;
   address: string | null;
   createdAt: string;
   updatedAt: string;
+  lastActiveAt: string;
+  gradeId?: string;
 };
 
-const statusStyles: Record<string, string> = {
-  premium: "bg-warning/10 text-warning border-warning/20",
-  free: "bg-muted text-muted-foreground",
-  trial: "bg-primary-light/10 text-primary-light border-primary-light/20",
+type UserProgress = {
+  totalQuestionsAttempted: number;
+  correctAnswers: number;
+  incorrectAnswers: number;
+  overallAccuracy: number;
+  currentStreak: number;
+  totalStudyTimeHours: number;
+  progressBySubject: {
+    subjectId: string;
+    subjectName: string;
+    accuracy: number;
+    totalAttempted: number;
+  }[];
 };
 
 const UsersPage = () => {
@@ -53,9 +53,12 @@ const UsersPage = () => {
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");
+  const [grades, setGrades] = useState<{ id: string; name: string }[]>([]);
   const [gradeFilter, setGradeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<AccountUser | null>(null);
+  const [userProgress, setUserProgress] = useState<UserProgress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState<AccountUser[]>([]);
   const [total, setTotal] = useState(0);
@@ -63,6 +66,7 @@ const UsersPage = () => {
   const perPage = 10;
 
   useEffect(() => {
+    if (!token) return;
     const fetchUsers = async () => {
       setLoading(true);
       try {
@@ -75,7 +79,6 @@ const UsersPage = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         const arr: AccountUser[] = Array.isArray(json.data) ? json.data : [];
-        // Show only students
         const studentsOnly = arr.filter((u) => u.type === "student");
         setUsers(studentsOnly);
         setTotal(studentsOnly.length);
@@ -92,7 +95,51 @@ const UsersPage = () => {
     fetchUsers();
   }, [token]);
 
-  const filtered = users.filter((u) => {
+  useEffect(() => {
+    if (!token) return;
+    const fetchGrades = async () => {
+      try {
+        const res = await fetch(`${API_URL}/grades`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        setGrades(Array.isArray(json) ? json : (json.data ?? []));
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to load grades.",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchGrades();
+  }, [token]);
+
+  // Fetch user progress when a user is selected
+  useEffect(() => {
+    if (!selectedUser || !token) return;
+    setUserProgress(null);
+    const fetchProgress = async () => {
+      setProgressLoading(true);
+      try {
+        const res = await fetch(
+          `${API_URL}/progress/dashboard/user/${selectedUser.id}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        setUserProgress(json);
+      } catch {
+        console.error("Failed to load user progress");
+      } finally {
+        setProgressLoading(false);
+      }
+    };
+    fetchProgress();
+  }, [selectedUser?.id, token]);
+
+  const filtered = users.filter((u: any) => {
     if (
       search &&
       !u.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -100,12 +147,19 @@ const UsersPage = () => {
       !u.phoneNumber.includes(search)
     )
       return false;
-    if (statusFilter !== "all" && u.type !== statusFilter) return false;
+    if (statusFilter !== "all" && u.status !== statusFilter) return false;
+    if (gradeFilter !== "all" && u.gradeId !== gradeFilter) return false;
     return true;
   });
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+
+  const getGradeName = (gradeId?: string) => {
+    if (!gradeId) return "—";
+    const found = grades.find((g) => g.id === gradeId);
+    return found ? `Grade ${found.name}` : "—";
+  };
 
   return (
     <div className="flex gap-6">
@@ -124,6 +178,7 @@ const UsersPage = () => {
               className="pl-9"
             />
           </div>
+
           <Select
             value={gradeFilter}
             onValueChange={(v) => {
@@ -136,11 +191,14 @@ const UsersPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Grades</SelectItem>
-              <SelectItem value="6">Grade 6</SelectItem>
-              <SelectItem value="8">Grade 8</SelectItem>
-              <SelectItem value="12">Grade 12</SelectItem>
+              {grades.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  Grade {g.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+
           <Select
             value={statusFilter}
             onValueChange={(v) => {
@@ -153,8 +211,8 @@ const UsersPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              <SelectItem value="premium">Premium</SelectItem>
               <SelectItem value="free">Free</SelectItem>
+              <SelectItem value="premium">Premium</SelectItem>
               <SelectItem value="trial">Trial</SelectItem>
             </SelectContent>
           </Select>
@@ -201,7 +259,9 @@ const UsersPage = () => {
                     colSpan={7}
                     className="p-8 text-center text-muted-foreground"
                   >
-                    No users found.
+                    {gradeFilter !== "all"
+                      ? `No Grade ${grades.find((g) => g.id === gradeFilter)?.name ?? ""} users found.`
+                      : "No users found."}
                   </td>
                 </tr>
               ) : (
@@ -229,26 +289,31 @@ const UsersPage = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="p-3">—</td>
+                    {/* ✅ Grade from gradeId */}
+                    <td className="p-3 text-sm">{getGradeName(u.gradeId)}</td>
                     <td className="p-3">
                       <Badge
                         variant="outline"
                         className={
-                          u.isActive
-                            ? "bg-success/10 text-success border-success/20"
-                            : "bg-muted text-muted-foreground"
+                          u.status === "premium"
+                            ? "bg-warning/10 text-warning border-warning/20"
+                            : u.status === "trial"
+                              ? "bg-accent/10 text-accent border-accent/20"
+                              : "bg-muted text-muted-foreground"
                         }
                       >
-                        {u.isActive ? "Active" : "Inactive"}
+                        {u.status?.toUpperCase() || "FREE"}
                       </Badge>
                     </td>
                     <td className="p-3 text-muted-foreground">
                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>
                     <td className="p-3 text-muted-foreground">
-                      {new Date(u.updatedAt).toLocaleDateString()}
+                      {u.lastActiveAt
+                        ? new Date(u.lastActiveAt).toLocaleDateString()
+                        : "—"}
                     </td>
-                    <td className="p-3">—</td>
+                    <td className="p-3 text-muted-foreground">—</td>
                     <td className="p-3">
                       <Button
                         variant="ghost"
@@ -300,6 +365,7 @@ const UsersPage = () => {
       {selectedUser && (
         <div className="w-96 bg-card border rounded-lg shadow-lg animate-slide-in overflow-y-auto max-h-[calc(100vh-8rem)] shrink-0 hidden lg:block">
           <div className="p-6 space-y-6">
+            {/* Header */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold">
@@ -330,10 +396,13 @@ const UsersPage = () => {
               </Button>
             </div>
 
+            {/* Grade & Status */}
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-muted rounded-lg p-3">
                 <p className="text-muted-foreground text-xs">Grade</p>
-                <p className="font-semibold">—</p>
+                <p className="font-semibold">
+                  {getGradeName(selectedUser.gradeId)}
+                </p>
               </div>
               <div className="bg-muted rounded-lg p-3">
                 <p className="text-muted-foreground text-xs">Status</p>
@@ -341,23 +410,97 @@ const UsersPage = () => {
                   variant="outline"
                   className={cn(
                     "mt-1",
-                    selectedUser.isActive
-                      ? "bg-success/10 text-success border-success/20"
-                      : "bg-muted text-muted-foreground",
+                    selectedUser.status === "premium"
+                      ? "bg-warning/10 text-warning border-warning/20"
+                      : selectedUser.status === "trial"
+                        ? "bg-accent/10 text-accent border-accent/20"
+                        : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {selectedUser.isActive ? "Active" : "Inactive"}
+                  {selectedUser.status?.toUpperCase() || "FREE"}
                 </Badge>
               </div>
             </div>
 
-            <div>
-              <h4 className="text-sm font-medium mb-3">Subject Performance</h4>
-              <p className="text-xs text-muted-foreground">
-                No data available.
-              </p>
-            </div>
+            {/* Progress Stats */}
+            {progressLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : userProgress ? (
+              <>
+                {/* Overall Stats */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">
+                    Overall Statistics
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold">
+                        {userProgress.totalQuestionsAttempted}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Questions</p>
+                    </div>
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold text-success">
+                        {userProgress.correctAnswers}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Correct</p>
+                    </div>
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold text-primary">
+                        {userProgress.overallAccuracy.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Accuracy</p>
+                    </div>
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold text-warning">
+                        {userProgress.currentStreak}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Streak</p>
+                    </div>
+                  </div>
+                  <div className="bg-muted rounded-lg p-3 text-center mt-2">
+                    <p className="text-lg font-bold">
+                      {userProgress.totalStudyTimeHours.toFixed(1)}h
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Total Study Time
+                    </p>
+                  </div>
+                </div>
 
+                {/* Subject Performance */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">
+                    Subject Performance
+                  </h4>
+                  {userProgress.progressBySubject.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No subject data available.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {userProgress.progressBySubject.map((s) => (
+                        <div key={s.subjectId}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-muted-foreground">
+                              {s.subjectName}
+                            </span>
+                            <span className="font-medium">
+                              {s.accuracy.toFixed(1)}%
+                            </span>
+                          </div>
+                          <Progress value={s.accuracy} className="h-2" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {/* Weak Topics */}
             <div>
               <h4 className="text-sm font-medium mb-2">Weak Topics</h4>
               <p className="text-xs text-muted-foreground">
@@ -365,6 +508,7 @@ const UsersPage = () => {
               </p>
             </div>
 
+            {/* Recent Activity */}
             <div>
               <h4 className="text-sm font-medium mb-3">Recent Activity</h4>
               <p className="text-xs text-muted-foreground">
@@ -372,6 +516,7 @@ const UsersPage = () => {
               </p>
             </div>
 
+            {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-2">
               <Button size="sm" className="text-xs">
                 <Crown className="h-3 w-3 mr-1" /> Grant Premium

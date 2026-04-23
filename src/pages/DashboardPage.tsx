@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Users,
   UserCheck,
@@ -5,10 +6,11 @@ import {
   Brain,
   Crown,
   HelpCircle,
+  Loader2,
 } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import ActivityFeed from "@/components/ActivityFeed";
-import { recentActivity, userGrowthData } from "@/data/mockData";
+import { recentActivity } from "@/data/mockData";
 import {
   LineChart,
   Line,
@@ -24,35 +26,88 @@ import {
   Bar,
   Legend,
 } from "recharts";
+import { useAuth } from "@/components/auth/context/AuthContext";
+import { useAccounts } from "@/components/auth/context/Accountcontext";
 
+const API_URL = "https://learnova-backen.onrender.com/api/v1";
 const COLORS = ["hsl(224,76%,33%)", "hsl(173,58%,39%)", "hsl(24,95%,53%)"];
 
-const premiumVsFree = [
-  { name: "Premium", value: 2345 },
-  { name: "Free", value: 9612 },
-  { name: "Trial", value: 890 },
-];
-
-const questionsByGrade = [
-  { grade: "Grade 6", questions: 78234 },
-  { grade: "Grade 8", questions: 89456 },
-  { grade: "Grade 12", questions: 66877 },
-];
-
 const DashboardPage = () => {
+  const { token } = useAuth();
+
+  // ── From context (accounts fetched once app-wide) ─────────────────────────
+  const {
+    totalUsers,
+    activeTodayCount,
+    userGrowthData,
+    statusData,
+    loading: accountsLoading,
+  } = useAccounts();
+
+  // ── Grade stats — local to dashboard only ─────────────────────────────────
+  const [questionsByGrade, setQuestionsByGrade] = useState<
+    { grade: string; questions: number }[]
+  >([]);
+  const [gradeStatsLoading, setGradeStatsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const fetchGradeStats = async () => {
+      setGradeStatsLoading(true);
+      try {
+        const gradesRes = await fetch(`${API_URL}/grades`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
+        const gradesJson = await gradesRes.json();
+        const grades: { id: string; name: string }[] = Array.isArray(gradesJson)
+          ? gradesJson
+          : (gradesJson.data ?? []);
+
+        const stats = await Promise.all(
+          grades.map(async (g) => {
+            try {
+              const res = await fetch(`${API_URL}/grades/${g.id}/statistics`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) return { grade: `Grade ${g.name}`, questions: 0 };
+              const json = await res.json();
+              return {
+                grade: `Grade ${json.gradeName}`,
+                questions: json.totalQuestions ?? 0,
+              };
+            } catch {
+              return { grade: `Grade ${g.name}`, questions: 0 };
+            }
+          }),
+        );
+
+        setQuestionsByGrade(stats);
+      } catch {
+        console.error("Failed to load grade statistics");
+      } finally {
+        setGradeStatsLoading(false);
+      }
+    };
+
+    fetchGradeStats();
+  }, [token]);
+
   return (
     <div className="space-y-6">
+      {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <KPICard
           title="Total Users"
-          value="12,847"
+          value={accountsLoading ? "—" : totalUsers}
           trend={23}
           trendLabel="Extra"
           icon={Users}
         />
         <KPICard
           title="Active Today"
-          value="1,234"
+          value={accountsLoading ? "—" : activeTodayCount}
           trend={12}
           icon={UserCheck}
           iconColor="text-success"
@@ -85,83 +140,109 @@ const DashboardPage = () => {
         />
       </div>
 
+      {/* ── User Growth + Pie ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-card rounded-lg border p-6 shadow-sm">
           <h3 className="font-semibold text-card-foreground mb-4">
             User Growth (Last 30 Days)
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={userGrowthData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} interval={4} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="users"
-                stroke="hsl(224,76%,33%)"
-                strokeWidth={2}
-                dot={false}
-                name="Total Users"
-              />
-              <Line
-                type="monotone"
-                dataKey="premium"
-                stroke="hsl(173,58%,39%)"
-                strokeWidth={2}
-                dot={false}
-                name="Premium"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {accountsLoading || userGrowthData.length === 0 ? (
+            <div className="h-[300px] flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={userGrowthData}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(214,32%,91%)"
+                />
+                <XAxis dataKey="day" tick={{ fontSize: 12 }} interval={4} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="users"
+                  stroke="hsl(224,76%,33%)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Total Users"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="premium"
+                  stroke="hsl(173,58%,39%)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Premium"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="bg-card rounded-lg border p-6 shadow-sm">
           <h3 className="font-semibold text-card-foreground mb-4">
             Premium vs Free
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={premiumVsFree}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                dataKey="value"
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
-              >
-                {premiumVsFree.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          {accountsLoading || statusData.length === 0 ? (
+            <div className="h-[300px] flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={statusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  dataKey="value"
+                  label={({ name, percent }) =>
+                    `${name} ${(percent * 100).toFixed(0)}%`
+                  }
+                >
+                  {statusData.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
+      {/* ── Grade Stats + Activity ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-card rounded-lg border p-6 shadow-sm">
           <h3 className="font-semibold text-card-foreground mb-4">
             Questions by Grade
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={questionsByGrade}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
-              <XAxis dataKey="grade" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar
-                dataKey="questions"
-                fill="hsl(224,76%,33%)"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          {gradeStatsLoading ? (
+            <div className="h-[250px] flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={questionsByGrade}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(214,32%,91%)"
+                />
+                <XAxis dataKey="grade" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar
+                  dataKey="questions"
+                  fill="hsl(224,76%,33%)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <ActivityFeed items={recentActivity} />
@@ -171,4 +252,3 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
-

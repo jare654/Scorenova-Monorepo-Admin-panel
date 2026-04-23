@@ -81,7 +81,15 @@ const LoginPage = () => {
             <FormField
               control={form.control}
               name="phoneNumber"
-              rules={{ required: "Phone number is required" }}
+              rules={{
+                required: "Phone number is required",
+                validate: (value) => {
+                  const digitsAfterPrefix = value.slice(3); // remove "251"
+                  if (digitsAfterPrefix.length !== 9)
+                    return "Phone number must be exactly 9 digits after 251";
+                  return true;
+                },
+              }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Phone Number</FormLabel>
@@ -97,16 +105,15 @@ const LoginPage = () => {
                         disabled={loading}
                         onChange={(e) => {
                           const raw = e.target.value;
-
-                          // Strip everything except digits after the prefix
                           const digits = raw.replace(/\D/g, "");
 
-                          // Always enforce +251 prefix, then append remaining digits
                           const withoutPrefix = digits.startsWith("251")
                             ? digits.slice(3)
                             : digits;
 
-                          field.onChange("251" + withoutPrefix);
+                          // Cap at 9 digits after the prefix
+                          const capped = withoutPrefix.slice(0, 9);
+                          field.onChange("251" + capped);
                         }}
                       />
                     </FormControl>
@@ -120,7 +127,13 @@ const LoginPage = () => {
             <FormField
               control={form.control}
               name="password"
-              rules={{ required: "Password is required" }}
+              rules={{
+                required: "Password is required",
+                maxLength: {
+                  value: 25,
+                  message: "Password cannot exceed 25 characters",
+                },
+              }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Password</FormLabel>
@@ -134,6 +147,7 @@ const LoginPage = () => {
                         className="pl-9 pr-10 h-11"
                         {...field}
                         disabled={loading}
+                        maxLength={25}
                       />
                     </FormControl>
 

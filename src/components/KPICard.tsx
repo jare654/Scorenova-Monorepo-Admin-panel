@@ -4,14 +4,21 @@ import { cn } from "@/lib/utils";
 
 interface KPICardProps {
   title: string;
-  value: string;
+  value: number | string;
   trend?: number;
   trendLabel?: string;
   icon: LucideIcon;
   iconColor?: string;
 }
 
-const KPICard = ({ title, value, trend, trendLabel, icon: Icon, iconColor = "text-primary" }: KPICardProps) => {
+const KPICard = ({
+  title,
+  value,
+  trend,
+  trendLabel,
+  icon: Icon,
+  iconColor = "text-primary",
+}: KPICardProps) => {
   const isPositive = trend && trend > 0;
 
   return (
@@ -27,10 +34,20 @@ const KPICard = ({ title, value, trend, trendLabel, icon: Icon, iconColor = "tex
               ) : (
                 <TrendingDown className="h-4 w-4 text-destructive" />
               )}
-              <span className={cn("text-xs font-medium", isPositive ? "text-success" : "text-destructive")}>
-                {isPositive ? "+" : ""}{trend}%
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  isPositive ? "text-success" : "text-destructive",
+                )}
+              >
+                {isPositive ? "+" : ""}
+                {trend}%
               </span>
-              {trendLabel && <span className="text-xs text-muted-foreground">{trendLabel}</span>}
+              {trendLabel && (
+                <span className="text-xs text-muted-foreground">
+                  {trendLabel}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -43,4 +60,3 @@ const KPICard = ({ title, value, trend, trendLabel, icon: Icon, iconColor = "tex
 };
 
 export default KPICard;
-

@@ -20,13 +20,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useLocation } from "react-router-dom";
 
 const API_URL = "https://learnova-backen.onrender.com/api/v1";
 
-// ─── Reusable Create Dialog ───────────────────────────────────────────────────
 const CreateDialog = ({
   open,
   title,
@@ -97,7 +97,70 @@ const CreateDialog = ({
   );
 };
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+const AIExplanationDialog = ({
+  open,
+  result,
+  onUse,
+  onClose,
+}: {
+  open: boolean;
+  result: { stepByStep: string; clear: string; simplified: string } | null;
+  onUse: (text: string) => void;
+  onClose: () => void;
+}) => {
+  if (!result) return null;
+
+  const tabs = [
+    { value: "stepByStep", label: "Step by Step", content: result.stepByStep },
+    { value: "clear", label: "Clear", content: result.clear },
+    { value: "simplified", label: "Simplified", content: result.simplified },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI Generated Explanation
+          </DialogTitle>
+        </DialogHeader>
+        <Tabs defaultValue="stepByStep" className="w-full">
+          <TabsList className="w-full">
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="flex-1 text-xs"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {tabs.map((tab) => (
+            <TabsContent key={tab.value} value={tab.value} className="mt-4">
+              <div className="bg-muted rounded-lg p-4 text-sm leading-relaxed min-h-[120px] whitespace-pre-line">
+                {tab.content}
+              </div>
+              <Button
+                className="w-full mt-3"
+                onClick={() => onUse(tab.content)}
+              >
+                Use this explanation
+              </Button>
+            </TabsContent>
+          ))}
+        </Tabs>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} className="w-full">
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const AddQuestionPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -118,18 +181,8 @@ const AddQuestionPage = () => {
   const [loading, setLoading] = useState(false);
 
   const [grades, setGrades] = useState<{ id: string; name: string }[]>([]);
-  type Subject = {
-    id: string;
-    name: string;
-    gradeId: string;
-  };
-
-  type Topic = {
-    id: string;
-    name: string;
-    subjectId: string;
-  };
-
+  type Subject = { id: string; name: string; gradeId: string };
+  type Topic = { id: string; name: string; subjectId: string };
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
 
@@ -137,9 +190,23 @@ const AddQuestionPage = () => {
   const [subjectDialog, setSubjectDialog] = useState(false);
   const [topicDialog, setTopicDialog] = useState(false);
   const [dialogLoading, setDialogLoading] = useState(false);
-
-  // Track if we've already prefilled to avoid repeated runs
   const [prefilled, setPrefilled] = useState(false);
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<{
+    stepByStep: string;
+    clear: string;
+    simplified: string;
+  } | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+
+  // ── Stats state
+  const [stats, setStats] = useState<{
+    totalAttempts: number;
+    correctAnswers: number;
+    averageTimeSeconds: number;
+    successRate: number;
+  } | null>(null);
 
   // ── Fetch grades on mount
   useEffect(() => {
@@ -162,7 +229,7 @@ const AddQuestionPage = () => {
     fetchGrades();
   }, [token]);
 
-  // ── Fetch subjects when grade changes (skip reset when editing and prefilling)
+  // ── Fetch subjects when grade changes
   useEffect(() => {
     if (!gradeId) {
       setSubjects([]);
@@ -180,7 +247,6 @@ const AddQuestionPage = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         setSubjects(Array.isArray(json) ? json : (json.data ?? []));
-        // Only reset subject/topic if NOT in edit mode prefill
         if (!isEditMode || prefilled) {
           setSubjectId("");
           setTopicId("");
@@ -223,15 +289,9 @@ const AddQuestionPage = () => {
     fetchTopics();
   }, [subjectId, token]);
 
-  // ── Prefill form when editing
-  // Step 1: fill text/options/difficulty/explanation immediately from state
-  // ─────────────────────────────────────────────────────────
-  // SAFE EDIT PREFILL LOGIC (FIXED)
-  // ─────────────────────────────────────────────────────────
-
+  // ── Prefill text/options/difficulty/explanation immediately
   useEffect(() => {
     if (!isEditMode || !editingQuestion) return;
-
     setQuestionText(editingQuestion.text ?? "");
     setOptions(
       Array.isArray(editingQuestion.options)
@@ -245,7 +305,6 @@ const AddQuestionPage = () => {
         : "",
     );
     setExplanation(editingQuestion.explanation ?? "");
-
     if (Array.isArray(editingQuestion.options)) {
       const idx = editingQuestion.options.indexOf(
         editingQuestion.correctAnswer,
@@ -254,43 +313,101 @@ const AddQuestionPage = () => {
     }
   }, [isEditMode, editingQuestion]);
 
-  // map grade → subject → topic safely AFTER data loads
+  // ── Resolve grade from grades list
   useEffect(() => {
-    if (!isEditMode || !editingQuestion) return;
-    if (!grades.length) return;
-
+    if (!isEditMode || !editingQuestion || !grades.length) return;
     const gradeMatch = grades.find((g) => g.name === editingQuestion.gradeName);
-
-    if (gradeMatch) {
-      setGradeId(gradeMatch.id);
-    }
+    if (gradeMatch) setGradeId(gradeMatch.id);
   }, [grades, isEditMode, editingQuestion]);
 
+  // ── Resolve subject from subjects list
   useEffect(() => {
-    if (!isEditMode || !editingQuestion) return;
-    if (!subjects.length) return;
-
+    if (!isEditMode || !editingQuestion || !subjects.length) return;
     const subjectMatch = subjects.find(
       (s) => s.name === editingQuestion.subjectName,
     );
-
-    if (subjectMatch) {
-      setSubjectId(subjectMatch.id);
-    }
+    if (subjectMatch) setSubjectId(subjectMatch.id);
   }, [subjects, isEditMode, editingQuestion]);
 
+  // ── Resolve topic from topics list
   useEffect(() => {
-    if (!isEditMode || !editingQuestion) return;
-    if (!topics.length) return;
-
+    if (!isEditMode || !editingQuestion || !topics.length) return;
     const topicMatch = topics.find((t) => t.name === editingQuestion.topicName);
-
-    if (topicMatch) {
-      setTopicId(topicMatch.id);
-    }
+    if (topicMatch) setTopicId(topicMatch.id);
   }, [topics, isEditMode, editingQuestion]);
 
-  // ── Create Grade
+  // ── Fetch question statistics when editing
+  useEffect(() => {
+    if (!isEditMode || !editingQuestion?.id) return;
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/questions/${editingQuestion.id}/statistics`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        setStats(json);
+      } catch {
+        console.error("Failed to load question statistics");
+      }
+    };
+    fetchStats();
+  }, [isEditMode, editingQuestion?.id, token]);
+
+  // ── AI Generate
+  const handleAIGenerate = async () => {
+    const missing: string[] = [];
+    if (!questionText.trim()) missing.push("question text");
+    if (!options[parseInt(correctAnswer)]?.trim())
+      missing.push("correct answer");
+    if (!subjectId) missing.push("subject");
+
+    if (missing.length > 0) {
+      toast({
+        title: "Missing information",
+        description: `Please fill in: ${missing.join(", ")} before generating an explanation.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedSubject = subjects.find((s) => s.id === subjectId);
+    const selectedTopic = topics.find((t) => t.id === topicId);
+
+    setAiLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/ai/explain`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: questionText,
+          correctAnswer: options[parseInt(correctAnswer)],
+          subject: selectedSubject?.name ?? "",
+          topic: selectedTopic?.name ?? "",
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAiResult(data);
+      setAiDialogOpen(true);
+    } catch {
+      toast({
+        title: "AI Error",
+        description: "Failed to generate explanation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // ── Create handlers
   const handleCreateGrade = async (name: string, description: string) => {
     const exists = grades.find(
       (g) => g.name.toLowerCase() === name.toLowerCase(),
@@ -334,7 +451,6 @@ const AddQuestionPage = () => {
     }
   };
 
-  // ── Create Subject
   const handleCreateSubject = async (name: string, description: string) => {
     const exists = subjects.find(
       (s) => s.name.toLowerCase() === name.toLowerCase(),
@@ -378,7 +494,6 @@ const AddQuestionPage = () => {
     }
   };
 
-  // ── Create Topic
   const handleCreateTopic = async (name: string, description: string) => {
     const exists = topics.find(
       (t) => t.name.toLowerCase() === name.toLowerCase(),
@@ -444,9 +559,7 @@ const AddQuestionPage = () => {
       });
       return;
     }
-
     setLoading(true);
-
     try {
       const requestBody = {
         subjectId,
@@ -454,15 +567,13 @@ const AddQuestionPage = () => {
         text: questionText,
         options,
         correctAnswer: options[parseInt(correctAnswer)],
-        difficulty: difficulty.toLowerCase(), // API expects lowercase
+        difficulty: difficulty.toLowerCase(),
         explanation,
       };
 
-      // ✅ Fix: use PUT for edit, POST for create
       const url = isEditMode
         ? `${API_URL}/questions/${editingQuestion.id}`
         : `${API_URL}/questions`;
-
       const method = isEditMode ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -489,7 +600,6 @@ const AddQuestionPage = () => {
           ? "Question updated successfully!"
           : "Question saved successfully!",
       });
-
       navigate("/questions");
     } catch (error: any) {
       toast({
@@ -703,8 +813,16 @@ const AddQuestionPage = () => {
       <div className="bg-card rounded-lg border p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-medium">Explanation</h3>
-          <Button variant="outline" size="sm">
-            <Sparkles className="h-4 w-4 mr-1" /> AI Generate
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAIGenerate}
+            disabled={aiLoading}
+          >
+            <Sparkles
+              className={`h-4 w-4 mr-1 ${aiLoading ? "animate-pulse" : ""}`}
+            />
+            {aiLoading ? "Generating..." : "AI Generate"}
           </Button>
         </div>
         <Textarea
@@ -713,6 +831,11 @@ const AddQuestionPage = () => {
           onChange={(e) => setExplanation(e.target.value)}
           rows={4}
         />
+        {explanation && (
+          <p className="text-xs text-muted-foreground">
+            {explanation.length} characters
+          </p>
+        )}
       </div>
 
       {/* Statistics */}
@@ -720,18 +843,36 @@ const AddQuestionPage = () => {
         <h3 className="font-medium mb-4">Statistics</h3>
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
-            <p className="text-2xl font-bold text-card-foreground">0</p>
+            <p className="text-2xl font-bold text-card-foreground">
+              {stats ? stats.totalAttempts.toLocaleString() : "0"}
+            </p>
             <p className="text-xs text-muted-foreground">Attempts</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-card-foreground">0</p>
+            <p className="text-2xl font-bold text-card-foreground">
+              {stats ? stats.correctAnswers.toLocaleString() : "0"}
+            </p>
             <p className="text-xs text-muted-foreground">Correct</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-card-foreground">—</p>
+            <p className="text-2xl font-bold text-card-foreground">
+              {stats
+                ? stats.averageTimeSeconds > 0
+                  ? `${stats.averageTimeSeconds}s`
+                  : "—"
+                : "—"}
+            </p>
             <p className="text-xs text-muted-foreground">Avg Time</p>
           </div>
         </div>
+        {stats && stats.totalAttempts > 0 && (
+          <div className="mt-4 pt-4 border-t text-center">
+            <p className="text-2xl font-bold text-card-foreground">
+              {stats.successRate.toFixed(1)}%
+            </p>
+            <p className="text-xs text-muted-foreground">Success Rate</p>
+          </div>
+        )}
       </div>
 
       {/* Create Dialogs */}
@@ -758,6 +899,21 @@ const AddQuestionPage = () => {
         loading={dialogLoading}
         onConfirm={handleCreateTopic}
         onCancel={() => setTopicDialog(false)}
+      />
+
+      {/* AI Explanation Dialog */}
+      <AIExplanationDialog
+        open={aiDialogOpen}
+        result={aiResult}
+        onUse={(text) => {
+          setExplanation(text);
+          setAiDialogOpen(false);
+          toast({
+            title: "Applied",
+            description: "AI explanation inserted into the field.",
+          });
+        }}
+        onClose={() => setAiDialogOpen(false)}
       />
     </div>
   );

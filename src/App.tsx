@@ -9,53 +9,56 @@ import QuestionsPage from "@/pages/QuestionsPage";
 import AddQuestionPage from "@/pages/AddQuestionPage";
 import UsersPage from "@/pages/UsersPage";
 import PaymentsPage from "@/pages/PaymentsPage";
-import AIUsagePage from "@/pages/AIUsagePage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
-import NotificationsPage from "./pages/NotificationsPage";
 import { NotificationProvider } from "./components/ui/NotificationContext";
 import AdminProfilePage from "./pages/AdminProfilePage";
 import LoginPage from "./pages/LoginPage";
 import { AuthProvider } from "./components/auth/context/AuthContext";
 import ProtectedRoute from "./components/auth/components/ProtectedRoute";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import EditProfilePage from "../src/pages/EditProfilePage";
+import { AccountsProvider } from "./components/auth/context/Accountcontext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <AuthProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <NotificationProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Navigate to="/login" replace />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route element={<DashboardLayout />}>
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/questions" element={<QuestionsPage />} />
-                <Route path="/questions/new" element={<AddQuestionPage />} />
-                <Route path="/users" element={<UsersPage />} />
-                <Route path="/payments" element={<PaymentsPage />} />
-                <Route path="/ai-usage" element={<AIUsagePage />} />
-                <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/admin-profile" element={<AdminProfilePage />} />
-                <Route path="/change-password" element={<ChangePasswordPage />} />
-                <Route
-                  path="/notifications"
-                  element={<NotificationsPage />}
-                />{" "}
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </NotificationProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <AccountsProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <NotificationProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route element={<DashboardLayout />}>
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/questions" element={<QuestionsPage />} />
+                  <Route path="/questions/new" element={<AddQuestionPage />} />
+                  <Route path="/users" element={<UsersPage />} />
+                  <Route path="/payments" element={<PaymentsPage />} />
+
+                  <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/admin-profile" element={<AdminProfilePage />} />
+                  <Route path="/edit-profile" element={<EditProfilePage />} />
+                  <Route
+                    path="/change-password"
+                    element={<ChangePasswordPage />}
+                  />
+                </Route>
+
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </NotificationProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </AccountsProvider>
   </AuthProvider>
 );
 

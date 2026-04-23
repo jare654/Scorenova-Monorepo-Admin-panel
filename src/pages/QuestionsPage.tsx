@@ -524,9 +524,6 @@ const QuestionsPage = () => {
                 />
               </th>
               <th className="p-3 text-left font-medium text-muted-foreground">
-                ID
-              </th>
-              <th className="p-3 text-left font-medium text-muted-foreground">
                 Question
               </th>
               <th className="p-3 text-left font-medium text-muted-foreground">
@@ -576,9 +573,6 @@ const QuestionsPage = () => {
                         checked={selected.has(q.id)}
                         onCheckedChange={() => toggleSelect(q.id)}
                       />
-                    </td>
-                    <td className="p-3 font-mono text-xs text-muted-foreground">
-                      {q.id}
                     </td>
                     <td className="p-3 max-w-xs truncate">{q.text}</td>
                     <td className="p-3">
@@ -646,9 +640,6 @@ const QuestionsPage = () => {
                           }}
                         >
                           <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Copy className="h-4 w-4" />
                         </Button>
                         {/* Delete — open confirmation dialog */}
                         <Button

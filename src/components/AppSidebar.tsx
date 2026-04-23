@@ -18,7 +18,6 @@ const navItems = [
   { title: "Question Bank", path: "/questions", icon: FileQuestion },
   { title: "Users", path: "/users", icon: Users },
   { title: "Payments", path: "/payments", icon: CreditCard },
-  { title: "AI Usage", path: "/ai-usage", icon: Brain },
   { title: "Analytics", path: "/analytics", icon: BarChart3 },
   { title: "Settings", path: "/settings", icon: Settings },
 ];
@@ -44,10 +43,14 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
           collapsed && "justify-center",
         )}
       >
-        <GraduationCap className="h-8 w-8 text-accent shrink-0" />
+        <img
+          src="/logo.jpg"
+          alt="Lernova"
+          className="h-8 w-8 text-accent shrink-0 border rounded-full"
+        />
         {!collapsed && (
           <div className="overflow-hidden">
-            <h1 className="text-sm font-bold leading-tight">AI Exam Prep</h1>
+            <h1 className="text-sm font-bold leading-tight"> LERNOVA </h1>
             <p className="text-xs text-sidebar-foreground/60">Ethiopia</p>
           </div>
         )}
@@ -101,4 +104,3 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
 };
 
 export default AppSidebar;
-

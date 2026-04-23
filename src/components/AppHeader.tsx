@@ -44,38 +44,6 @@ const AppHeader = ({ title, onMenuClick }: AppHeaderProps) => {
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="pl-9 w-64 bg-muted/50 border-none"
-          />
-        </div>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/notifications")}
-          className={`relative transition-all duration-300 ${
-            unreadCount === 0
-              ? "text-green-500 drop-shadow-[0_0_6px_rgba(34,197,94,0.6)]"
-              : ""
-          }`}
-        >
-          <Bell
-            className={`h-5 w-5 transition-all ${
-              unreadCount === 0 ? "animate-pulse" : ""
-            }`}
-          />
-
-          {/* Show badge ONLY if unread */}
-          {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-accent text-accent-foreground text-[10px] flex items-center justify-center font-bold">
-              {unreadCount}
-            </span>
-          )}
-        </Button>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 px-2">

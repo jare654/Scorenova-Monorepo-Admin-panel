@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   User,
   Mail,
@@ -21,17 +21,50 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export interface AdminUser {
+interface UserInfo {
   id: string;
   name: string;
   email: string;
-  role: "Super Admin" | "Content Manager" | "Support";
-  lastLogin: string;
+  gender: string;
+  type: string;
+  fcmId: string;
+  address: string | null;
+  phoneNumber: string;
+  role: {
+    id: string;
+    name: string;
+    key: string;
+  };
+  permissions: string[];
 }
 
 const AdminProfilePage = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          "https://learnova-backen.onrender.com/api/v1/auth/get-user-info",
+          {
+            headers: {
+              accept: "*/*",
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+        const data = await res.json();
+        setUserInfo(data);
+      } catch (err) {
+        console.error("Failed to fetch user info", err);
+      }
+    };
+
+    fetchUserInfo();
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -49,6 +82,14 @@ const AdminProfilePage = () => {
     }
   };
 
+  const displayName = userInfo?.name ?? user?.name ?? "—";
+  const displayRole = userInfo?.role?.name ?? user?.role ?? "—";
+  const displayEmail = userInfo?.email ?? user?.email ?? "—";
+  const displayPhone = userInfo?.phoneNumber ?? "—";
+  const displayLastLogin = user?.lastLogin
+    ? new Date(user.lastLogin).toLocaleString()
+    : "—";
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 p-6">
       {/* Header Section */}
@@ -58,24 +99,24 @@ const AdminProfilePage = () => {
             <User className="h-10 w-10 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              {user?.name ?? "—"}
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge
-                variant="outline"
-                className={getRoleColor(user?.role ?? "")}
-              >
-                {user?.role ?? "—"}
+              <Badge variant="outline" className={getRoleColor(displayRole)}>
+                {displayRole}
               </Badge>
-              <span className="text-sm text-muted-foreground">
-                ID: {user?.id ?? "—"}
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                {displayPhone}
               </span>
             </div>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/edit-profile")}
+            size="sm"
+          >
             <Edit className="h-4 w-4 mr-2" /> Edit Profile
           </Button>
           <Button
@@ -89,89 +130,60 @@ const AdminProfilePage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Account Details */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Account Information</CardTitle>
-            <CardDescription>
-              Personal and contact details for your admin account.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Mail className="h-3 w-3" /> Email Address
-                </p>
-                <p className="text-sm font-semibold">{user?.email ?? "—"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3" /> Permissions
-                </p>
-                <p className="text-sm font-semibold">Full System Access</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> Last Login
-                </p>
-                <p className="text-sm font-semibold">
-                  {user?.lastLogin
-                    ? new Date(user.lastLogin).toLocaleString()
-                    : "—"}
-                </p>
-              </div>
-            </div>
-
-            <Separator className="my-4" />
-
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Security Settings</h4>
-              <p className="text-xs text-muted-foreground">
-                Two-factor authentication is currently{" "}
-                <span className="text-green-600 font-bold">Enabled</span>.
+      {/* Account Details — full width now, no side card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Information</CardTitle>
+          <CardDescription>
+            Personal and contact details for your admin account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Mail className="h-3 w-3" /> Email Address
               </p>
-              <Button
-                variant="link"
-                onClick={() => navigate("/change-password")}
-                className="p-0 h-auto text-xs"
-              >
-                Change Password
-              </Button>
+              <p className="text-sm font-semibold">{displayEmail}</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Phone className="h-3 w-3" /> Phone Number
+              </p>
+              <p className="text-sm font-semibold">{displayPhone}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Permissions
+              </p>
+              <p className="text-sm font-semibold">Full System Access</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Last Login
+              </p>
+              <p className="text-sm font-semibold">{displayLastLogin}</p>
+            </div>
+          </div>
 
-        {/* Side Stats/Quick Info */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Activity Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">
-                  Questions Created
-                </span>
-                <span className="text-sm font-bold">124</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">
-                  Reviews Pending
-                </span>
-                <span className="text-sm font-bold text-orange-500">12</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">
-                  Resolved Tickets
-                </span>
-                <span className="text-sm font-bold text-green-600">89</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          <Separator className="my-4" />
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Security Settings</h4>
+            <p className="text-xs text-muted-foreground">
+              Two-factor authentication is currently{" "}
+              <span className="text-green-600 font-bold">Enabled</span>.
+            </p>
+            <Button
+              variant="link"
+              onClick={() => navigate("/change-password")}
+              className="p-0 h-auto text-xs"
+            >
+              Change Password
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

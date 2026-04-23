@@ -1,25 +1,66 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, AlertTriangle } from "lucide-react";
 import { adminUsers } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 
 const SettingsPage = () => {
+  const API_URL = "https://learnova-backen.onrender.com/api/v1";
+
   const { toast } = useToast();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [aiScanner, setAiScanner] = useState(true);
   const [mockExams, setMockExams] = useState(true);
   const [shortAnswer, setShortAnswer] = useState(false);
   const [contentModeration, setContentModeration] = useState(true);
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      setLoadingAdmins(true);
+      try {
+        const res = await fetch(`${API_URL}/accounts/get-accounts`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+
+        const json = await res.json();
+
+        // ✅ filter NON-students (admins, etc.)
+        const adminUsers = (json?.data || []).filter(
+          (u: any) => u.type !== "student",
+        );
+
+        setAdmins(adminUsers);
+      } catch (err) {
+        console.error("Failed to fetch admins");
+      } finally {
+        setLoadingAdmins(false);
+      }
+    };
+
+    fetchAdmins();
+  }, []);
 
   const handleSave = () => {
-    toast({ title: "Settings Saved", description: "Your changes have been saved successfully." });
+    toast({
+      title: "Settings Saved",
+      description: "Your changes have been saved successfully.",
+    });
   };
 
   return (
@@ -54,11 +95,18 @@ const SettingsPage = () => {
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
               <div>
                 <p className="text-sm font-medium">Maintenance Mode</p>
-                <p className="text-xs text-muted-foreground">Temporarily disable the app for all users</p>
+                <p className="text-xs text-muted-foreground">
+                  Temporarily disable the app for all users
+                </p>
               </div>
               <div className="flex items-center gap-2">
-                {maintenanceMode && <AlertTriangle className="h-4 w-4 text-warning" />}
-                <Switch checked={maintenanceMode} onCheckedChange={setMaintenanceMode} />
+                {maintenanceMode && (
+                  <AlertTriangle className="h-4 w-4 text-warning" />
+                )}
+                <Switch
+                  checked={maintenanceMode}
+                  onCheckedChange={setMaintenanceMode}
+                />
               </div>
             </div>
             <Button onClick={handleSave}>Save Changes</Button>
@@ -69,12 +117,35 @@ const SettingsPage = () => {
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">Feature Toggles</h3>
             {[
-              { label: "Enable AI Scanner", desc: "Allow users to scan questions using camera", state: aiScanner, set: setAiScanner },
-              { label: "Enable Mock Exams", desc: "Enable timed mock exam functionality", state: mockExams, set: setMockExams },
-              { label: "Enable Short Answer Questions", desc: "Allow open-ended question types", state: shortAnswer, set: setShortAnswer },
-              { label: "Content Moderation", desc: "Auto-review user-generated content", state: contentModeration, set: setContentModeration },
+              {
+                label: "Enable AI Scanner",
+                desc: "Allow users to scan questions using camera",
+                state: aiScanner,
+                set: setAiScanner,
+              },
+              {
+                label: "Enable Mock Exams",
+                desc: "Enable timed mock exam functionality",
+                state: mockExams,
+                set: setMockExams,
+              },
+              {
+                label: "Enable Short Answer Questions",
+                desc: "Allow open-ended question types",
+                state: shortAnswer,
+                set: setShortAnswer,
+              },
+              {
+                label: "Content Moderation",
+                desc: "Auto-review user-generated content",
+                state: contentModeration,
+                set: setContentModeration,
+              },
             ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+              <div
+                key={item.label}
+                className="flex items-center justify-between p-4 bg-muted rounded-lg"
+              >
                 <div>
                   <p className="text-sm font-medium">{item.label}</p>
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
@@ -101,7 +172,9 @@ const SettingsPage = () => {
               <div>
                 <Label>Primary Model</Label>
                 <Select defaultValue="mistral">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="mistral">Mistral 7B</SelectItem>
                     <SelectItem value="llama">Llama 3</SelectItem>
@@ -112,7 +185,9 @@ const SettingsPage = () => {
               <div>
                 <Label>OCR Model</Label>
                 <Select defaultValue="paddle">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="paddle">PaddleOCR</SelectItem>
                     <SelectItem value="tesseract">Tesseract</SelectItem>
@@ -149,12 +224,21 @@ const SettingsPage = () => {
           <div className="bg-card rounded-lg border p-6 space-y-4">
             <h3 className="font-semibold">Notification Settings</h3>
             {[
-              { label: "Email Notifications", desc: "Receive email alerts for important events" },
+              {
+                label: "Email Notifications",
+                desc: "Receive email alerts for important events",
+              },
               { label: "Daily Reports", desc: "Get daily summary emails" },
               { label: "Payment Alerts", desc: "Notify on failed payments" },
-              { label: "User Milestones", desc: "Alert when users hit 1000 questions" },
+              {
+                label: "User Milestones",
+                desc: "Alert when users hit 1000 questions",
+              },
             ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+              <div
+                key={item.label}
+                className="flex items-center justify-between p-4 bg-muted rounded-lg"
+              >
                 <div>
                   <p className="text-sm font-medium">{item.label}</p>
                   <p className="text-xs text-muted-foreground">{item.desc}</p>
@@ -170,26 +254,62 @@ const SettingsPage = () => {
           <div className="bg-card rounded-lg border shadow-sm">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold">Admin Users</h3>
-              <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Admin</Button>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Add Admin
+              </Button>
             </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="p-3 text-left font-medium text-muted-foreground">Name</th>
-                  <th className="p-3 text-left font-medium text-muted-foreground">Email</th>
-                  <th className="p-3 text-left font-medium text-muted-foreground">Role</th>
-                  <th className="p-3 text-left font-medium text-muted-foreground">Last Login</th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">
+                    Name
+                  </th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">
+                    Email
+                  </th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">
+                    Role
+                  </th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">
+                    Last Login
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {adminUsers.map((admin) => (
-                  <tr key={admin.id} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-medium">{admin.name}</td>
-                    <td className="p-3 text-muted-foreground">{admin.email}</td>
-                    <td className="p-3"><Badge variant="outline">{admin.role}</Badge></td>
-                    <td className="p-3 text-muted-foreground">{admin.lastLogin}</td>
+                {loadingAdmins ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center">
+                      Loading...
+                    </td>
                   </tr>
-                ))}
+                ) : admins.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="p-6 text-center text-muted-foreground"
+                    >
+                      No admins found
+                    </td>
+                  </tr>
+                ) : (
+                  admins.map((admin) => (
+                    <tr
+                      key={admin.id}
+                      className="border-b hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="p-3 font-medium">{admin.name}</td>
+                      <td className="p-3 text-muted-foreground">
+                        {admin.email}
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="outline">{admin.type}</Badge>
+                      </td>
+                      {admin.lastActiveAt
+                        ? new Date(admin.lastActiveAt).toLocaleDateString()
+                        : "—"}
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -200,4 +320,3 @@ const SettingsPage = () => {
 };
 
 export default SettingsPage;
-
