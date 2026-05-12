@@ -86,10 +86,11 @@ const AnalyticsPage = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesJson = await gradesRes.json();
-        const grades: { id: string; name: string }[] = Array.isArray(gradesJson)
-          ? gradesJson
-          : (gradesJson.data ?? []);
+        const gradesPayload = await gradesRes.json();
+        const gradesData = gradesPayload?.data ?? gradesPayload;
+        const grades: { id: string; name: string }[] = Array.isArray(gradesData)
+          ? gradesData
+          : [];
 
         const stats = await Promise.all(
           grades.map(async (g) => {
@@ -104,7 +105,8 @@ const AnalyticsPage = () => {
                   accuracy: 0,
                   retention: 0,
                 };
-              const json = await res.json();
+              const payload = await res.json();
+              const json = payload?.data ?? payload;
               return {
                 grade: `Grade ${json.gradeName}`,
                 users: json.totalUsers ?? 0,
@@ -148,11 +150,13 @@ const AnalyticsPage = () => {
           }),
         ]);
         if (dauRes.ok) {
-          const j = await dauRes.json();
+          const payload = await dauRes.json();
+          const j = payload?.data ?? payload;
           setDau(j.average ?? 0);
         }
         if (mauRes.ok) {
-          const j = await mauRes.json();
+          const payload = await mauRes.json();
+          const j = payload?.data ?? payload;
           setMau(j.average ?? 0);
         }
       } catch {
@@ -172,12 +176,13 @@ const AnalyticsPage = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesJson = await gradesRes.json();
+        const gradesPayload = await gradesRes.json();
+        const gradesData = gradesPayload?.data ?? gradesPayload;
         const allGrades: { id: string; name: string }[] = Array.isArray(
-          gradesJson,
+          gradesData,
         )
-          ? gradesJson
-          : (gradesJson.data ?? []);
+          ? gradesData
+          : [];
         const top3 = allGrades.slice(0, 3);
 
         // Step 2: for each grade fetch its subjects
@@ -188,12 +193,13 @@ const AnalyticsPage = () => {
                 headers: { Authorization: `Bearer ${token}` },
               });
               if (!res.ok) return { grade: g, subjects: [] };
-              const json = await res.json();
+              const payload = await res.json();
+              const json = payload?.data ?? payload;
               const subjects: { id: string; name: string }[] = Array.isArray(
                 json,
               )
                 ? json
-                : (json.data ?? []);
+                : [];
               return { grade: g, subjects };
             } catch {
               return { grade: g, subjects: [] };
@@ -223,7 +229,8 @@ const AnalyticsPage = () => {
                     { headers: { Authorization: `Bearer ${token}` } },
                   );
                   if (!res.ok) return;
-                  const json = await res.json();
+                  const payload = await res.json();
+                  const json = payload?.data ?? payload;
                   gradeAccuracyMap[grade.name][s.name] = json.accuracy ?? 0;
                 } catch {
                   gradeAccuracyMap[grade.name][s.name] = 0;

@@ -44,13 +44,13 @@ const AppSidebar = ({ collapsed, onToggle }: AppSidebarProps) => {
         )}
       >
         <img
-          src="/logo.jpg"
-          alt="Lernova"
-          className="h-8 w-8 text-accent shrink-0 border rounded-full"
+          src="/learnova-logo.jpg"
+          alt="Learnova"
+          className="h-8 w-8 shrink-0 border rounded-full bg-white"
         />
         {!collapsed && (
           <div className="overflow-hidden">
-            <h1 className="text-sm font-bold leading-tight"> LERNOVA </h1>
+            <h1 className="text-sm font-bold leading-tight"> Learnova </h1>
             <p className="text-xs text-sidebar-foreground/60">Ethiopia</p>
           </div>
         )}

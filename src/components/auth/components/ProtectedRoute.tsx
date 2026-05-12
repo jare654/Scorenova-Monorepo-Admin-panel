@@ -7,7 +7,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (!token || user?.role !== "Super Admin") {
     return <Navigate to="/login" replace />;
   }
-
   return children;
 };
 
