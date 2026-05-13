@@ -1,6 +1,5 @@
-import { Bell, Search, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +7,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { useNotifications } from "@/components/ui/NotificationContext";
 import { useAuth } from "./auth/context/AuthContext";
 
 interface AppHeaderProps {
@@ -19,7 +17,6 @@ interface AppHeaderProps {
 const AppHeader = ({ title, onMenuClick }: AppHeaderProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { unreadCount } = useNotifications();
 
   const initials = user?.name
     ? user.name

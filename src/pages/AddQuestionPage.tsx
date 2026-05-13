@@ -348,8 +348,16 @@ const AddQuestionPage = () => {
           },
         );
         if (!res.ok) return;
-        const json = await res.json();
-        setStats(json);
+        const payload = await res.json();
+        const result = payload?.data ?? payload;
+        if (result && typeof result === "object") {
+          setStats({
+            totalAttempts: result.totalAttempts ?? 0,
+            correctAnswers: result.correctAnswers ?? 0,
+            averageTimeSeconds: result.averageTimeSeconds ?? 0,
+            successRate: result.successRate ?? 0,
+          });
+        }
       } catch {
         console.error("Failed to load question statistics");
       }
@@ -393,8 +401,18 @@ const AddQuestionPage = () => {
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setAiResult(data);
+      const payload = await res.json();
+      const result = payload?.data ?? payload;
+      const normalized = {
+        stepByStep:
+          result?.stepByStep ?? result?.steps ?? result?.explanation ?? "",
+        clear: result?.clear ?? result?.explanation ?? "",
+        simplified: result?.simplified ?? result?.explanation ?? "",
+      };
+      if (!normalized.stepByStep && !normalized.clear && !normalized.simplified) {
+        throw new Error("Invalid AI response");
+      }
+      setAiResult(normalized);
       setAiDialogOpen(true);
     } catch {
       toast({
