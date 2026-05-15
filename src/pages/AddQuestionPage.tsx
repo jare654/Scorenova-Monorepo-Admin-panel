@@ -24,8 +24,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useLocation } from "react-router-dom";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 const CreateDialog = ({
   open,
@@ -359,7 +358,7 @@ const AddQuestionPage = () => {
           });
         }
       } catch {
-        console.error("Failed to load question statistics");
+        // Failed to load question statistics
       }
     };
     fetchStats();

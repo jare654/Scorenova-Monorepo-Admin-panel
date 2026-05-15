@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 const ChangePasswordPage = () => {
   const { token } = useAuth();
@@ -101,10 +100,14 @@ const ChangePasswordPage = () => {
       setConfirmPassword("");
 
       navigate("/"); // or keep user on page if you want
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.";
       toast({
         title: "Error",
-        description: error.message || "Something went wrong.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

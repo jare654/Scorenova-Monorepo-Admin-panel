@@ -6,8 +6,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type AccountStatus = "free" | "premium" | "trial";
@@ -138,6 +137,13 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
     try {
       const token = localStorage.getItem("token");
 
+      // If there's no token, avoid calling protected endpoints and surface a clear error
+      if (!token) {
+        setError("Not authenticated");
+        setLoading(false);
+        return;
+      }
+
       const [dateRes, accountsRes] = await Promise.all([
         fetch(`${API_URL}/get-date`),
         fetch(`${API_URL}/accounts/get-accounts`, {
@@ -150,19 +156,23 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
         const dateText = await dateRes.text();
         setServerDate(new Date(dateText.replace(/"/g, "")));
       } catch {
-        console.warn("Could not parse server date, falling back to local date");
         setServerDate(new Date());
       }
 
       // Accounts
       if (!accountsRes.ok) {
-        throw new Error(`Accounts fetch failed: HTTP ${accountsRes.status}`);
+        let body = "";
+        try {
+          body = await accountsRes.text();
+        } catch (e) {
+          body = String(e);
+        }
+        throw new Error("Failed to fetch accounts");
       }
       const accountsJson = await accountsRes.json();
       const data: Account[] = accountsJson?.data ?? [];
       setAllAccounts(data);
     } catch (err) {
-      console.error("AccountsContext fetch failed:", err);
       setError("Failed to load accounts data.");
       // Never rethrow — a fetch failure must NEVER crash the layout
     } finally {
@@ -172,6 +182,34 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // Listen for auth events so we can refetch when the user logs in/out
+  useEffect(() => {
+    const handleLogin = () => {
+      fetchData();
+    };
+    const handleLogout = () => {
+      setAllAccounts([]);
+      setServerDate(null);
+      setLoading(false);
+    };
+
+    try {
+      window.addEventListener("auth:login", handleLogin);
+      window.addEventListener("auth:logout", handleLogout);
+    } catch (e) {
+      /* noop */
+    }
+
+    return () => {
+      try {
+        window.removeEventListener("auth:login", handleLogin);
+        window.removeEventListener("auth:logout", handleLogout);
+      } catch (e) {
+        /* noop */
+      }
+    };
   }, [fetchData]);
 
   // ── Derived values ────────────────────────────────────────────────────────

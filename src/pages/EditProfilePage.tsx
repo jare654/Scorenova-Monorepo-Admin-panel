@@ -28,6 +28,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { API_URL } from "@/lib/api";
 
 type FormValues = {
   name: string;
@@ -57,15 +58,12 @@ const EditProfilePage = () => {
     const fetchUserInfo = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(
-          "https://learnova-backen.onrender.com/api/v1/auth/get-user-info",
-          {
-            headers: {
-              accept: "*/*",
-              Authorization: `Bearer ${token}`,
-            },
+        const res = await fetch(`${API_URL}/auth/get-user-info`, {
+          headers: {
+            accept: "*/*",
+            Authorization: `Bearer ${token}`,
           },
-        );
+        });
         const data = await res.json();
 
         form.reset({

@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import ActivityFeed from "@/components/ActivityFeed";
-import { recentActivity } from "@/data/mockData";
 import {
   LineChart,
   Line,
@@ -28,12 +27,14 @@ import {
 } from "recharts";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useAccounts } from "@/components/auth/context/Accountcontext";
+import { API_URL } from "@/lib/api";
+import { useIsMobile } from "@/hooks/use-mobile";
 
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
 const COLORS = ["hsl(224,76%,33%)", "hsl(173,58%,39%)", "hsl(24,95%,53%)"];
 
 const DashboardPage = () => {
   const { token } = useAuth();
+  const isMobile = useIsMobile();
 
   // ── From context (accounts fetched once app-wide) ─────────────────────────
   const {
@@ -85,7 +86,7 @@ const DashboardPage = () => {
 
         setQuestionsByGrade(stats);
       } catch {
-        console.error("Failed to load grade statistics");
+        // Failed to load grade statistics
       } finally {
         setGradeStatsLoading(false);
       }
@@ -95,9 +96,9 @@ const DashboardPage = () => {
   }, [token]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <KPICard
           title="Total Users"
           value={accountsLoading ? "—" : totalUsers}
@@ -141,26 +142,26 @@ const DashboardPage = () => {
       </div>
 
       {/* ── User Growth + Pie ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-card rounded-lg border p-6 shadow-sm">
-          <h3 className="font-semibold text-card-foreground mb-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6 lg:col-span-2">
+          <h3 className="mb-4 font-semibold text-card-foreground">
             User Growth (Last 30 Days)
           </h3>
           {accountsLoading || userGrowthData.length === 0 ? (
-            <div className="h-[300px] flex items-center justify-center">
+            <div className="flex h-[240px] items-center justify-center sm:h-[300px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
               <LineChart data={userGrowthData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(214,32%,91%)"
                 />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} interval={4} />
+                <XAxis dataKey="day" tick={{ fontSize: isMobile ? 10 : 12 }} interval={isMobile ? 6 : 4} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Legend />
+                {!isMobile && <Legend />}
                 <Line
                   type="monotone"
                   dataKey="users"
@@ -182,16 +183,16 @@ const DashboardPage = () => {
           )}
         </div>
 
-        <div className="bg-card rounded-lg border p-6 shadow-sm">
-          <h3 className="font-semibold text-card-foreground mb-4">
+        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
+          <h3 className="mb-4 font-semibold text-card-foreground">
             Premium vs Free
           </h3>
           {accountsLoading || statusData.length === 0 ? (
-            <div className="h-[300px] flex items-center justify-center">
+            <div className="flex h-[240px] items-center justify-center sm:h-[300px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
               <PieChart>
                 <Pie
                   data={statusData}
@@ -216,23 +217,23 @@ const DashboardPage = () => {
       </div>
 
       {/* ── Grade Stats + Activity ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card rounded-lg border p-6 shadow-sm">
-          <h3 className="font-semibold text-card-foreground mb-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
+          <h3 className="mb-4 font-semibold text-card-foreground">
             Questions by Grade
           </h3>
           {gradeStatsLoading ? (
-            <div className="h-[250px] flex items-center justify-center">
+            <div className="flex h-[220px] items-center justify-center sm:h-[250px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={isMobile ? 220 : 250}>
               <BarChart data={questionsByGrade}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(214,32%,91%)"
                 />
-                <XAxis dataKey="grade" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="grade" tick={{ fontSize: isMobile ? 10 : 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Bar
@@ -245,7 +246,7 @@ const DashboardPage = () => {
           )}
         </div>
 
-        <ActivityFeed items={recentActivity} />
+        <ActivityFeed items={[]} />
       </div>
     </div>
   );

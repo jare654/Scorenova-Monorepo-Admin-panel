@@ -29,8 +29,7 @@ import {
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 const RADAR_COLORS = [
   "hsl(224,76%,33%)",
@@ -160,7 +159,7 @@ const AnalyticsPage = () => {
           setMau(j.average ?? 0);
         }
       } catch {
-        console.error("Failed to load user averages");
+        // Failed to load user averages
       }
     };
     fetchUserAverages();
@@ -261,7 +260,7 @@ const AnalyticsPage = () => {
         setRadarData(radar);
         setRadarGradeLabels(labels as any);
       } catch {
-        console.error("Failed to load subject performance");
+        // Failed to load subject performance
       } finally {
         setRadarLoading(false);
       }

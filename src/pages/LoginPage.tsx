@@ -39,23 +39,20 @@ const LoginPage = () => {
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
 
-    const success = await login(values.phoneNumber, values.password);
+    const result = await login(values.phoneNumber, values.password);
 
     setLoading(false);
 
-    if (!success) {
+    if (!result.success) {
       toast({
         title: "Login Failed",
-        description: "Incorrect phone number or password",
+        description: result.message ?? "Incorrect phone number or password",
         variant: "destructive",
       });
       return;
     }
 
-    toast({
-      title: "Welcome",
-      description: "Login successful",
-    });
+    toast({ title: "Welcome", description: "Login successful" });
 
     navigate("/dashboard");
   };

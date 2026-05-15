@@ -21,8 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 const SettingsPage = () => {
   const { toast } = useToast();
@@ -74,7 +73,7 @@ const SettingsPage = () => {
         );
         setAdmins(adminList);
       } catch {
-        console.error("Failed to fetch admins");
+        // Failed to fetch admins
       } finally {
         setLoadingAdmins(false);
       }
@@ -95,7 +94,7 @@ const SettingsPage = () => {
         setShortAnswer(json.shortAnswerQuestions ?? false);
         setContentModeration(json.contentModeration ?? false);
       } catch {
-        console.error("Failed to fetch feature toggles");
+        // Failed to fetch feature toggles
       }
     };
     fetchToggles();
@@ -113,7 +112,7 @@ const SettingsPage = () => {
         const json = await res.json();
         setUserMilestones(json.isEnabled ?? false);
       } catch {
-        console.error("Failed to fetch milestone notification status");
+        // Failed to fetch milestone notification status
       }
     };
     fetchMilestoneStatus();

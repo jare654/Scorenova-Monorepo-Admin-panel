@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/context/AuthContext";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 export interface GradeStat {
   grade: string;
@@ -57,7 +56,7 @@ export function useGradeStats(): UseGradeStatsReturn {
 
         setQuestionsByGrade(stats);
       } catch (err) {
-        console.error("useGradeStats failed:", err);
+        // useGradeStats failed
         setError("Failed to load grade statistics.");
       } finally {
         setLoading(false);

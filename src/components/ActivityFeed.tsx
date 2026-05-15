@@ -15,23 +15,29 @@ interface ActivityFeedProps {
 
 const ActivityFeed = ({ items }: ActivityFeedProps) => {
   return (
-    <div className="bg-card rounded-lg border p-6 shadow-sm">
-      <h3 className="font-semibold text-card-foreground mb-4">Recent Activity</h3>
+    <div className="rounded-lg border bg-card p-4 shadow-sm sm:p-6">
+      <h3 className="mb-4 font-semibold text-card-foreground">Recent Activity</h3>
       <div className="space-y-4">
-        {items.map((item) => {
-          const { icon: Icon, color } = iconMap[item.type] || iconMap.info;
-          return (
-            <div key={item.id} className="flex items-start gap-3">
-              <div className={cn("mt-0.5", color)}>
-                <Icon className="h-4 w-4" />
+        {items.length === 0 ? (
+          <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+            Activity will appear here once the backend feed is connected.
+          </div>
+        ) : (
+          items.map((item) => {
+            const { icon: Icon, color } = iconMap[item.type] || iconMap.info;
+            return (
+              <div key={item.id} className="flex items-start gap-3">
+                <div className={cn("mt-0.5", color)}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-card-foreground">{item.message}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{item.time}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-card-foreground">{item.message}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{item.time}</p>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -20,46 +20,66 @@ import ProtectedRoute from "./components/auth/components/ProtectedRoute";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import EditProfilePage from "../src/pages/EditProfilePage";
 import { AccountsProvider } from "./components/auth/context/Accountcontext";
+import { useAuth } from "./components/auth/context/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
+const AuthLandingRedirect = () => {
+  const { token, initialized } = useAuth();
+
+  if (!initialized) {
+    return null;
+  }
+
+  return <Navigate to={token ? "/dashboard" : "/login"} replace />;
+};
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <AuthProvider>
-    <AccountsProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <NotificationProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Navigate to="/login" replace />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route element={<DashboardLayout />}>
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/questions" element={<QuestionsPage />} />
-                  <Route path="/questions/new" element={<AddQuestionPage />} />
-                  <Route path="/users" element={<UsersPage />} />
-                  <Route path="/payments" element={<PaymentsPage />} />
-
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/admin-profile" element={<AdminProfilePage />} />
-                  <Route path="/edit-profile" element={<EditProfilePage />} />
+  <ErrorBoundary>
+    <AuthProvider>
+      <AccountsProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <NotificationProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<AuthLandingRedirect />} />
+                  <Route path="/login" element={<LoginPage />} />
                   <Route
-                    path="/change-password"
-                    element={<ChangePasswordPage />}
-                  />
-                </Route>
+                    element={
+                      <ProtectedRoute>
+                        <DashboardLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/questions" element={<QuestionsPage />} />
+                    <Route path="/questions/new" element={<AddQuestionPage />} />
+                    <Route path="/users" element={<UsersPage />} />
+                    <Route path="/payments" element={<PaymentsPage />} />
 
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </NotificationProvider>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </AccountsProvider>
-  </AuthProvider>
+                    <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/admin-profile" element={<AdminProfilePage />} />
+                    <Route path="/edit-profile" element={<EditProfilePage />} />
+                    <Route
+                      path="/change-password"
+                      element={<ChangePasswordPage />}
+                    />
+                  </Route>
+
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </NotificationProvider>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </AccountsProvider>
+    </AuthProvider>
+  </ErrorBoundary>
 );
 
 export default App;

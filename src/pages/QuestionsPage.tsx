@@ -23,8 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 const difficultyColors: Record<string, string> = {
   easy: "bg-success/10 text-success border-success/20",
@@ -177,7 +176,7 @@ const QuestionsPage = () => {
         setTotal(json.total || 0);
         setTotalPages(json.totalPages || 1);
       } catch (error) {
-        console.error("Network error:", error);
+        // Network error
         toast({
           title: "Network Error",
           description: "Failed to connect to server.",
@@ -621,7 +620,7 @@ const QuestionsPage = () => {
                                 state: { question: fullQuestion, isEdit: true },
                               });
                             } catch (err) {
-                              console.error(err);
+                              // Delete failed
                               toast({
                                 title: "Error",
                                 description:

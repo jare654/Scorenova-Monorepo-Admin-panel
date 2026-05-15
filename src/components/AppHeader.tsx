@@ -27,8 +27,8 @@ const AppHeader = ({ title, onMenuClick }: AppHeaderProps) => {
         .toUpperCase()
     : "AD";
   return (
-    <header className="sticky top-0 z-30 h-16 bg-card border-b flex items-center justify-between px-6 gap-4">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-card/95 px-4 backdrop-blur sm:px-6">
+      <div className="flex min-w-0 items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
@@ -37,10 +37,12 @@ const AppHeader = ({ title, onMenuClick }: AppHeaderProps) => {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-xl font-bold text-foreground">{title}</h1>
+        <h1 className="truncate text-base font-bold text-foreground sm:text-xl">
+          {title}
+        </h1>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 shrink-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 px-2">

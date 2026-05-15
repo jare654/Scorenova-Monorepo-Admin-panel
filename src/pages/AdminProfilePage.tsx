@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { API_URL } from "@/lib/api";
 
 interface UserInfo {
   id: string;
@@ -47,19 +48,16 @@ const AdminProfilePage = () => {
     const fetchUserInfo = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(
-          "https://learnova-backen.onrender.com/api/v1/auth/get-user-info",
-          {
-            headers: {
-              accept: "*/*",
-              Authorization: `Bearer ${token}`,
-            },
+        const res = await fetch(`${API_URL}/auth/get-user-info`, {
+          headers: {
+            accept: "*/*",
+            Authorization: `Bearer ${token}`,
           },
-        );
+        });
         const data = await res.json();
         setUserInfo(data);
       } catch (err) {
-        console.error("Failed to fetch user info", err);
+        // Failed to fetch user info
       }
     };
 

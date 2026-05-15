@@ -22,13 +22,15 @@ const KPICard = ({
   const isPositive = trend && trend > 0;
 
   return (
-    <div className="bg-card rounded-lg border p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground font-medium">{title}</p>
-          <p className="text-2xl font-bold text-card-foreground">{value}</p>
+    <div className="rounded-lg border bg-card p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5 lg:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="break-words text-2xl font-bold text-card-foreground sm:text-[1.75rem]">
+            {value}
+          </p>
           {trend !== undefined && (
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {isPositive ? (
                 <TrendingUp className="h-4 w-4 text-success" />
               ) : (
@@ -51,7 +53,7 @@ const KPICard = ({
             </div>
           )}
         </div>
-        <div className={cn("p-3 rounded-lg bg-muted", iconColor)}>
+        <div className={cn("rounded-lg bg-muted p-3", iconColor)}>
           <Icon className="h-5 w-5" />
         </div>
       </div>

@@ -14,8 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-const API_URL = "https://learnova-backen.onrender.com/api/v1";
+import { API_URL } from "@/lib/api";
 
 type AccountUser = {
   id: string;
@@ -131,7 +130,7 @@ const UsersPage = () => {
         const json = await res.json();
         setUserProgress(json);
       } catch {
-        console.error("Failed to load user progress");
+        // Failed to load user progress
       } finally {
         setProgressLoading(false);
       }

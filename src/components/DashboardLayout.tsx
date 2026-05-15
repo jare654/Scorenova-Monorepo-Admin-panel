@@ -25,25 +25,19 @@ const DashboardLayout = () => {
   const title = pageTitles[location.pathname] ?? "Dashboard";
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex overflow-x-hidden">
       {/* Sidebar */}
       <AppSidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((prev) => !prev)}
+        mobileOpen={mobileOpen}
+        onMobileOpenChange={setMobileOpen}
       />
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
 
       {/* Main content area */}
       <div
         className={cn(
-          "flex flex-col flex-1 transition-all duration-300",
+          "flex min-w-0 flex-1 flex-col transition-all duration-300",
           collapsed ? "lg:ml-16" : "lg:ml-64",
         )}
       >
@@ -51,7 +45,7 @@ const DashboardLayout = () => {
           title={title}
           onMenuClick={() => setMobileOpen((prev) => !prev)}
         />
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
