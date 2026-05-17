@@ -27,7 +27,7 @@ import {
 } from "recharts";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useAccounts } from "@/components/auth/context/Accountcontext";
-import { API_URL } from "@/lib/api";
+import { API_URL, getGrades } from "@/lib/api";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const COLORS = ["hsl(224,76%,33%)", "hsl(173,58%,39%)", "hsl(24,95%,53%)"];
@@ -57,14 +57,7 @@ const DashboardPage = () => {
     const fetchGradeStats = async () => {
       setGradeStatsLoading(true);
       try {
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesJson = await gradesRes.json();
-        const grades: { id: string; name: string }[] = Array.isArray(gradesJson)
-          ? gradesJson
-          : (gradesJson.data ?? []);
+        const grades = await getGrades(token);
 
         const stats = await Promise.all(
           grades.map(async (g) => {

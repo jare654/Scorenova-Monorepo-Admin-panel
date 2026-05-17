@@ -24,7 +24,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useLocation } from "react-router-dom";
-import { API_URL } from "@/lib/api";
+import { API_URL, getGrades } from "@/lib/api";
 
 const CreateDialog = ({
   open,
@@ -211,12 +211,8 @@ const AddQuestionPage = () => {
   useEffect(() => {
     const fetchGrades = async () => {
       try {
-        const res = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setGrades(Array.isArray(json) ? json : (json.data ?? []));
+        const grades = await getGrades(token);
+        setGrades(grades);
       } catch {
         toast({
           title: "Error",

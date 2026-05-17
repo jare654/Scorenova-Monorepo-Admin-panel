@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import { API_URL, getGrades } from "@/lib/api";
 
 export interface GradeStat {
   grade: string;
@@ -26,15 +26,7 @@ export function useGradeStats(): UseGradeStatsReturn {
       setLoading(true);
       setError(null);
       try {
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-
-        const gradesJson = await gradesRes.json();
-        const grades: { id: string; name: string }[] = Array.isArray(gradesJson)
-          ? gradesJson
-          : (gradesJson.data ?? []);
+        const grades = await getGrades(token);
 
         const stats = await Promise.all(
           grades.map(async (g) => {

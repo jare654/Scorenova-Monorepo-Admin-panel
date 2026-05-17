@@ -29,7 +29,11 @@ import {
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import {
+  API_URL,
+  getGrades,
+  getAnalyticsAverageUsers,
+} from "@/lib/api";
 
 const RADAR_COLORS = [
   "hsl(224,76%,33%)",
@@ -81,15 +85,7 @@ const AnalyticsPage = () => {
     const fetchGradeStats = async () => {
       setGradeLoading(true);
       try {
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesPayload = await gradesRes.json();
-        const gradesData = gradesPayload?.data ?? gradesPayload;
-        const grades: { id: string; name: string }[] = Array.isArray(gradesData)
-          ? gradesData
-          : [];
+        const grades: { id: string; name: string }[] = await getGrades(token);
 
         const stats = await Promise.all(
           grades.map(async (g) => {
@@ -140,24 +136,13 @@ const AnalyticsPage = () => {
   useEffect(() => {
     const fetchUserAverages = async () => {
       try {
-        const [dauRes, mauRes] = await Promise.all([
-          fetch(`${API_URL}/analytics/daily-average-users`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${API_URL}/analytics/monthly-average-users`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [dailyAverage, monthlyAverage] = await Promise.all([
+          getAnalyticsAverageUsers(token, "daily"),
+          getAnalyticsAverageUsers(token, "monthly"),
         ]);
-        if (dauRes.ok) {
-          const payload = await dauRes.json();
-          const j = payload?.data ?? payload;
-          setDau(j.average ?? 0);
-        }
-        if (mauRes.ok) {
-          const payload = await mauRes.json();
-          const j = payload?.data ?? payload;
-          setMau(j.average ?? 0);
-        }
+
+        setDau(dailyAverage);
+        setMau(monthlyAverage);
       } catch {
         // Failed to load user averages
       }
@@ -171,17 +156,7 @@ const AnalyticsPage = () => {
       setRadarLoading(true);
       try {
         // Step 1: fetch grades, take first 3
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesPayload = await gradesRes.json();
-        const gradesData = gradesPayload?.data ?? gradesPayload;
-        const allGrades: { id: string; name: string }[] = Array.isArray(
-          gradesData,
-        )
-          ? gradesData
-          : [];
+        const allGrades: { id: string; name: string }[] = await getGrades(token);
         const top3 = allGrades.slice(0, 3);
 
         // Step 2: for each grade fetch its subjects

@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import { API_URL, getGrades } from "@/lib/api";
 
 const difficultyColors: Record<string, string> = {
   easy: "bg-success/10 text-success border-success/20",
@@ -73,12 +73,7 @@ const QuestionsPage = () => {
     const fetchGrades = async () => {
       setGradesLoading(true);
       try {
-        const res = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const arr: Grade[] = Array.isArray(json) ? json : (json.data ?? []);
+        const arr: Grade[] = await getGrades(token);
         setGrades(arr);
 
         setSubjectsLoading(true);

@@ -14,7 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { API_URL } from "@/lib/api";
+import { API_URL, getGrades } from "@/lib/api";
 
 type AccountUser = {
   id: string;
@@ -98,12 +98,8 @@ const UsersPage = () => {
     if (!token) return;
     const fetchGrades = async () => {
       try {
-        const res = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setGrades(Array.isArray(json) ? json : (json.data ?? []));
+        const grades = await getGrades(token);
+        setGrades(grades);
       } catch {
         toast({
           title: "Error",
