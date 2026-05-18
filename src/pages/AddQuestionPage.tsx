@@ -22,9 +22,19 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/components/auth/context/AuthContext";
 import { useLocation } from "react-router-dom";
-import { API_URL } from "@/lib/api";
+import {
+  createGrade,
+  createQuestion,
+  createSubject,
+  createTopic,
+  explainQuestion,
+  fetchGrades,
+  fetchQuestionStatistics,
+  fetchSubjects,
+  fetchTopics,
+  updateQuestion,
+} from "@/services/api/questions";
 
 const CreateDialog = ({
   open,
@@ -163,7 +173,6 @@ const AIExplanationDialog = ({
 const AddQuestionPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { token } = useAuth();
   const location = useLocation();
   const editingQuestion = location.state?.question;
   const isEditMode = !!editingQuestion;
@@ -209,14 +218,9 @@ const AddQuestionPage = () => {
 
   // ── Fetch grades on mount
   useEffect(() => {
-    const fetchGrades = async () => {
+    const loadGrades = async () => {
       try {
-        const res = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setGrades(Array.isArray(json) ? json : (json.data ?? []));
+        setGrades(await fetchGrades());
       } catch {
         toast({
           title: "Error",
@@ -225,8 +229,8 @@ const AddQuestionPage = () => {
         });
       }
     };
-    fetchGrades();
-  }, [token]);
+    loadGrades();
+  }, [toast]);
 
   // ── Fetch subjects when grade changes
   useEffect(() => {
@@ -238,14 +242,9 @@ const AddQuestionPage = () => {
       }
       return;
     }
-    const fetchSubjects = async () => {
+    const loadSubjects = async () => {
       try {
-        const res = await fetch(`${API_URL}/subjects?gradeId=${gradeId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setSubjects(Array.isArray(json) ? json : (json.data ?? []));
+        setSubjects(await fetchSubjects(gradeId));
         if (!isEditMode || prefilled) {
           setSubjectId("");
           setTopicId("");
@@ -258,8 +257,8 @@ const AddQuestionPage = () => {
         });
       }
     };
-    fetchSubjects();
-  }, [gradeId, token]);
+    loadSubjects();
+  }, [gradeId, isEditMode, prefilled, toast]);
 
   // ── Fetch topics when subject changes
   useEffect(() => {
@@ -268,14 +267,9 @@ const AddQuestionPage = () => {
       if (!isEditMode || prefilled) setTopicId("");
       return;
     }
-    const fetchTopics = async () => {
+    const loadTopics = async () => {
       try {
-        const res = await fetch(`${API_URL}/topics?subjectId=${subjectId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setTopics(Array.isArray(json) ? json : (json.data ?? []));
+        setTopics(await fetchTopics(subjectId));
         if (!isEditMode || prefilled) setTopicId("");
       } catch {
         toast({
@@ -285,8 +279,8 @@ const AddQuestionPage = () => {
         });
       }
     };
-    fetchTopics();
-  }, [subjectId, token]);
+    loadTopics();
+  }, [subjectId, isEditMode, prefilled, toast]);
 
   // ── Prefill text/options/difficulty/explanation immediately
   useEffect(() => {
@@ -338,17 +332,9 @@ const AddQuestionPage = () => {
   // ── Fetch question statistics when editing
   useEffect(() => {
     if (!isEditMode || !editingQuestion?.id) return;
-    const fetchStats = async () => {
+    const loadStats = async () => {
       try {
-        const res = await fetch(
-          `${API_URL}/questions/${editingQuestion.id}/statistics`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        if (!res.ok) return;
-        const payload = await res.json();
-        const result = payload?.data ?? payload;
+        const result = await fetchQuestionStatistics(editingQuestion.id);
         if (result && typeof result === "object") {
           setStats({
             totalAttempts: result.totalAttempts ?? 0,
@@ -361,8 +347,8 @@ const AddQuestionPage = () => {
         // Failed to load question statistics
       }
     };
-    fetchStats();
-  }, [isEditMode, editingQuestion?.id, token]);
+    loadStats();
+  }, [isEditMode, editingQuestion?.id]);
 
   // ── AI Generate
   const handleAIGenerate = async () => {
@@ -386,28 +372,12 @@ const AddQuestionPage = () => {
 
     setAiLoading(true);
     try {
-      const res = await fetch(`${API_URL}/ai/explain`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          question: questionText,
-          correctAnswer: options[parseInt(correctAnswer)],
-          subject: selectedSubject?.name ?? "",
-          topic: selectedTopic?.name ?? "",
-        }),
+      const normalized = await explainQuestion({
+        question: questionText,
+        correctAnswer: options[parseInt(correctAnswer)],
+        subject: selectedSubject?.name ?? "",
+        topic: selectedTopic?.name ?? "",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const payload = await res.json();
-      const result = payload?.data ?? payload;
-      const normalized = {
-        stepByStep:
-          result?.stepByStep ?? result?.steps ?? result?.explanation ?? "",
-        clear: result?.clear ?? result?.explanation ?? "",
-        simplified: result?.simplified ?? result?.explanation ?? "",
-      };
       if (!normalized.stepByStep && !normalized.clear && !normalized.simplified) {
         throw new Error("Invalid AI response");
       }
@@ -440,16 +410,7 @@ const AddQuestionPage = () => {
     }
     setDialogLoading(true);
     try {
-      const res = await fetch(`${API_URL}/grades`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, description }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newGrade = await res.json();
+      const newGrade = await createGrade({ name, description });
       setGrades((prev) => [...prev, newGrade]);
       setGradeId(newGrade.id);
       setGradeDialog(false);
@@ -483,16 +444,7 @@ const AddQuestionPage = () => {
     }
     setDialogLoading(true);
     try {
-      const res = await fetch(`${API_URL}/subjects`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, description, gradeId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newSubject = await res.json();
+      const newSubject = await createSubject({ name, description, gradeId });
       setSubjects((prev) => [...prev, newSubject]);
       setSubjectId(newSubject.id);
       setSubjectDialog(false);
@@ -526,16 +478,7 @@ const AddQuestionPage = () => {
     }
     setDialogLoading(true);
     try {
-      const res = await fetch(`${API_URL}/topics`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, description, subjectId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newTopic = await res.json();
+      const newTopic = await createTopic({ name, description, subjectId });
       setTopics((prev) => [...prev, newTopic]);
       setTopicId(newTopic.id);
       setTopicDialog(false);
@@ -588,27 +531,10 @@ const AddQuestionPage = () => {
         explanation,
       };
 
-      const url = isEditMode
-        ? `${API_URL}/questions/${editingQuestion.id}`
-        : `${API_URL}/questions`;
-      const method = isEditMode ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(
-          Array.isArray(errorData.message)
-            ? errorData.message.join(", ")
-            : errorData.message || `HTTP ${res.status}`,
-        );
+      if (isEditMode) {
+        await updateQuestion(editingQuestion.id, requestBody);
+      } else {
+        await createQuestion(requestBody);
       }
 
       toast({

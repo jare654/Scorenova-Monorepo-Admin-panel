@@ -64,3 +64,47 @@ export interface AdminUser {
   lastLogin: string;
 }
 
+export interface BackendGrade {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackendSubject {
+  id: string;
+  name: string;
+  description?: string;
+  gradeId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackendTopic {
+  id: string;
+  name: string;
+  description?: string;
+  subjectId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackendQuestion {
+  id: string;
+  text: string;
+  options: string[];
+  correctAnswer: string;
+  difficulty: "easy" | "medium" | "hard" | string;
+  explanation?: string;
+  subjectId: string;
+  topicId?: string | null;
+  accuracy?: number;
+  gradeName?: string;
+  subjectName?: string;
+  topicName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+

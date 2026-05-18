@@ -4,9 +4,10 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type AccountStatus = "free" | "premium" | "trial";
@@ -129,55 +130,60 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
   const [serverDate, setServerDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchAtRef = useRef<number>(0);
+  const inflightRef = useRef<Promise<void> | null>(null);
 
   const fetchData = useCallback(async () => {
+    const now = Date.now();
+    if (inflightRef.current) {
+      return inflightRef.current;
+    }
+
+    if (now - lastFetchAtRef.current < 30_000) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    try {
-      const token = localStorage.getItem("token");
-
-      // If there's no token, avoid calling protected endpoints and surface a clear error
-      if (!token) {
-        setError("Not authenticated");
-        setLoading(false);
-        return;
-      }
-
-      const [dateRes, accountsRes] = await Promise.all([
-        fetch(`${API_URL}/get-date`),
-        fetch(`${API_URL}/accounts/get-accounts`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      // Server date — non-critical, fall back to local date if it fails
+    const promise = (async () => {
       try {
-        const dateText = await dateRes.text();
-        setServerDate(new Date(dateText.replace(/"/g, "")));
-      } catch {
-        setServerDate(new Date());
-      }
+        const token = localStorage.getItem("token");
 
-      // Accounts
-      if (!accountsRes.ok) {
-        let body = "";
-        try {
-          body = await accountsRes.text();
-        } catch (e) {
-          body = String(e);
+        // If there's no token, avoid calling protected endpoints and surface a clear error
+        if (!token) {
+          setError("Not authenticated");
+          setLoading(false);
+          return;
         }
-        throw new Error("Failed to fetch accounts");
+
+        const [dateText, accountsJson] = await Promise.all([
+          apiClient.get<string>("/get-date", undefined, { retries: 0 }),
+          apiClient.get<{ data?: Account[] }>("/accounts/get-accounts", undefined, { retries: 0 }),
+        ]);
+
+        // Server date — non-critical, fall back to local date if it fails
+        try {
+          const normalizedDate = typeof dateText === "string" ? dateText : String(dateText ?? "");
+          setServerDate(new Date(normalizedDate.replace(/"/g, "")));
+        } catch {
+          setServerDate(new Date());
+        }
+
+        const data: Account[] = accountsJson?.data ?? [];
+        setAllAccounts(data);
+        lastFetchAtRef.current = Date.now();
+      } catch (err) {
+        setError("Failed to load accounts data.");
+        // Never rethrow — a fetch failure must NEVER crash the layout
+      } finally {
+        setLoading(false);
+        inflightRef.current = null;
       }
-      const accountsJson = await accountsRes.json();
-      const data: Account[] = accountsJson?.data ?? [];
-      setAllAccounts(data);
-    } catch (err) {
-      setError("Failed to load accounts data.");
-      // Never rethrow — a fetch failure must NEVER crash the layout
-    } finally {
-      setLoading(false);
-    }
+    })();
+
+    inflightRef.current = promise;
+    return promise;
   }, []);
 
   useEffect(() => {

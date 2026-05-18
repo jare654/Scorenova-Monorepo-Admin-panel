@@ -29,7 +29,7 @@ import {
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 const RADAR_COLORS = [
   "hsl(224,76%,33%)",
@@ -45,6 +45,56 @@ const geoData = [
   { city: "Other", percentage: 18 },
 ];
 
+type GradeItem = {
+  id: string;
+  name: string;
+};
+
+type GradePerformanceItem = {
+  grade: string;
+  users: number;
+  accuracy: number;
+  retention: number;
+};
+
+type RadarPoint = {
+  subject: string;
+  [key: string]: string | number;
+};
+
+type RadarLabel = {
+  key: string;
+  label: string;
+  color: string;
+};
+
+type AverageUsersResponse = {
+  data?: {
+    average?: number;
+  };
+  average?: number;
+};
+
+type GradeStatisticsResponse = {
+  data?: {
+    gradeName?: string;
+    totalUsers?: number;
+  };
+  gradeName?: string;
+  totalUsers?: number;
+};
+
+type SubjectsResponse = {
+  data?: GradeItem[];
+};
+
+type ProgressResponse = {
+  data?: {
+    accuracy?: number;
+  };
+  accuracy?: number;
+};
+
 const AnalyticsPage = () => {
   const [dateRange, setDateRange] = useState("30d");
   const { toast } = useToast();
@@ -52,14 +102,8 @@ const AnalyticsPage = () => {
 
   // Grade performance state
   const [gradePerformance, setGradePerformance] = useState<
-    {
-      grade: string;
-      users: number;
-      accuracy: number;
-      retention: number;
-    }[]
+    GradePerformanceItem[]
   >([]);
-  [] > [];
   const [gradeLoading, setGradeLoading] = useState(false);
 
   // DAU / MAU state
@@ -67,13 +111,8 @@ const AnalyticsPage = () => {
   const [mau, setMau] = useState<number | null>(null);
 
   // Subject performance radar state
-  const [radarData, setRadarData] = useState<any[]>([]);
-  const [radarGradeLabels, setRadarGradeLabels] = useState<
-    {
-      key: string;
-      label: string;
-    }[]
-  >([]);
+  const [radarData, setRadarData] = useState<RadarPoint[]>([]);
+  const [radarGradeLabels, setRadarGradeLabels] = useState<RadarLabel[]>([]);
   const [radarLoading, setRadarLoading] = useState(false);
 
   // ── Fetch grade stats (for performance cards)
@@ -81,30 +120,16 @@ const AnalyticsPage = () => {
     const fetchGradeStats = async () => {
       setGradeLoading(true);
       try {
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesPayload = await gradesRes.json();
+        const gradesPayload = await apiClient.get<{ data?: GradeItem[] }>("/grades");
         const gradesData = gradesPayload?.data ?? gradesPayload;
-        const grades: { id: string; name: string }[] = Array.isArray(gradesData)
-          ? gradesData
-          : [];
+        const grades: GradeItem[] = Array.isArray(gradesData) ? gradesData : [];
 
         const stats = await Promise.all(
           grades.map(async (g) => {
             try {
-              const res = await fetch(`${API_URL}/grades/${g.id}/statistics`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok)
-                return {
-                  grade: `Grade ${g.name}`,
-                  users: 0,
-                  accuracy: 0,
-                  retention: 0,
-                };
-              const payload = await res.json();
+              const payload = await apiClient.get<GradeStatisticsResponse>(
+                `/grades/${g.id}/statistics`,
+              );
               const json = payload?.data ?? payload;
               return {
                 grade: `Grade ${json.gradeName}`,
@@ -134,28 +159,22 @@ const AnalyticsPage = () => {
       }
     };
     fetchGradeStats();
-  }, [token]);
+  }, [token, toast]);
 
   // ── Fetch DAU / MAU
   useEffect(() => {
     const fetchUserAverages = async () => {
       try {
-        const [dauRes, mauRes] = await Promise.all([
-          fetch(`${API_URL}/analytics/daily-average-users`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${API_URL}/analytics/monthly-average-users`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [dauPayload, mauPayload] = await Promise.all([
+          apiClient.get<AverageUsersResponse>("/analytics/daily-average-users").catch(() => null),
+          apiClient.get<AverageUsersResponse>("/analytics/monthly-average-users").catch(() => null),
         ]);
-        if (dauRes.ok) {
-          const payload = await dauRes.json();
-          const j = payload?.data ?? payload;
+        if (dauPayload) {
+          const j = dauPayload?.data ?? dauPayload;
           setDau(j.average ?? 0);
         }
-        if (mauRes.ok) {
-          const payload = await mauRes.json();
-          const j = payload?.data ?? payload;
+        if (mauPayload) {
+          const j = mauPayload?.data ?? mauPayload;
           setMau(j.average ?? 0);
         }
       } catch {
@@ -171,13 +190,9 @@ const AnalyticsPage = () => {
       setRadarLoading(true);
       try {
         // Step 1: fetch grades, take first 3
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesPayload = await gradesRes.json();
+        const gradesPayload = await apiClient.get<{ data?: GradeItem[] }>("/grades");
         const gradesData = gradesPayload?.data ?? gradesPayload;
-        const allGrades: { id: string; name: string }[] = Array.isArray(
+        const allGrades: GradeItem[] = Array.isArray(
           gradesData,
         )
           ? gradesData
@@ -188,17 +203,11 @@ const AnalyticsPage = () => {
         const gradeSubjects = await Promise.all(
           top3.map(async (g) => {
             try {
-              const res = await fetch(`${API_URL}/subjects?gradeId=${g.id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) return { grade: g, subjects: [] };
-              const payload = await res.json();
+              const payload = await apiClient.get<SubjectsResponse>(
+                `/subjects?gradeId=${g.id}`,
+              );
               const json = payload?.data ?? payload;
-              const subjects: { id: string; name: string }[] = Array.isArray(
-                json,
-              )
-                ? json
-                : [];
+              const subjects: GradeItem[] = Array.isArray(json) ? json : [];
               return { grade: g, subjects };
             } catch {
               return { grade: g, subjects: [] };
@@ -223,12 +232,9 @@ const AnalyticsPage = () => {
             await Promise.all(
               subjects.map(async (s) => {
                 try {
-                  const res = await fetch(
-                    `${API_URL}/progress/subject/${s.id}`,
-                    { headers: { Authorization: `Bearer ${token}` } },
+                  const payload = await apiClient.get<ProgressResponse>(
+                    `/progress/subject/${s.id}`,
                   );
-                  if (!res.ok) return;
-                  const payload = await res.json();
                   const json = payload?.data ?? payload;
                   gradeAccuracyMap[grade.name][s.name] = json.accuracy ?? 0;
                 } catch {
@@ -242,7 +248,7 @@ const AnalyticsPage = () => {
         // Step 5: build radar data array
         // Each entry: { subject: "Math", "Grade 12": 75, "Grade 8": 68, ... }
         const radar = subjectNames.map((subjectName) => {
-          const entry: Record<string, any> = { subject: subjectName };
+          const entry: RadarPoint = { subject: subjectName };
           top3.forEach((g) => {
             const key = `Grade ${g.name}`;
             entry[key] = gradeAccuracyMap[g.name]?.[subjectName] ?? 0;
@@ -258,7 +264,7 @@ const AnalyticsPage = () => {
         }));
 
         setRadarData(radar);
-        setRadarGradeLabels(labels as any);
+        setRadarGradeLabels(labels);
       } catch {
         // Failed to load subject performance
       } finally {
@@ -383,7 +389,7 @@ const AnalyticsPage = () => {
                 <PolarGrid />
                 <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12 }} />
                 <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                {radarGradeLabels.map((g: any) => (
+                {radarGradeLabels.map((g) => (
                   <Radar
                     key={g.key}
                     name={g.label}

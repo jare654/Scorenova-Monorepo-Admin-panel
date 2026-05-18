@@ -28,7 +28,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 type FormValues = {
   name: string;
@@ -57,14 +57,7 @@ const EditProfilePage = () => {
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`${API_URL}/auth/get-user-info`, {
-          headers: {
-            accept: "*/*",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const data = await res.json();
+        const data = await apiClient.get<any>("/auth/get-user-info");
 
         form.reset({
           name: data.name ?? "",
@@ -89,16 +82,42 @@ const EditProfilePage = () => {
 
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
+    try {
+      const data = await apiClient.post<any>("/accounts/update-profile", {
+        name: values.name,
+        email: values.email,
+        phoneNumber: values.phoneNumber,
+        gender: values.gender,
+        address: values.address || undefined,
+        isActive: true,
+      });
 
-    // Placeholder until update endpoint is available
-    await new Promise((resolve) => setTimeout(resolve, 800));
+      // Proactively update cached user in localStorage
+      const cachedUser = localStorage.getItem("user");
+      if (cachedUser) {
+        try {
+          const userObj = JSON.parse(cachedUser);
+          const updatedUserObj = { ...userObj, ...data };
+          localStorage.setItem("user", JSON.stringify(updatedUserObj));
+        } catch {
+          // ignore
+        }
+      }
 
-    setLoading(false);
-
-    toast({
-      title: "Coming Soon",
-      description: "Profile update endpoint is not available yet",
-    });
+      toast({
+        title: "Profile Updated",
+        description: "Your profile information has been saved successfully.",
+      });
+      navigate("/admin-profile");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (fetching) {

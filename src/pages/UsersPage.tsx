@@ -14,7 +14,18 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 type AccountUser = {
   id: string;
@@ -50,93 +61,192 @@ type UserProgress = {
 const UsersPage = () => {
   const { token } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [grades, setGrades] = useState<{ id: string; name: string }[]>([]);
   const [gradeFilter, setGradeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<AccountUser | null>(null);
-  const [userProgress, setUserProgress] = useState<UserProgress | null>(null);
-  const [progressLoading, setProgressLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [users, setUsers] = useState<AccountUser[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
   const perPage = 10;
 
-  useEffect(() => {
-    if (!token) return;
-    const fetchUsers = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_URL}/accounts/get-accounts`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const arr: AccountUser[] = Array.isArray(json.data) ? json.data : [];
-        const studentsOnly = arr.filter((u) => u.type === "student");
-        setUsers(studentsOnly);
-        setTotal(studentsOnly.length);
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load users.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
-  }, [token]);
+  // Real API Actions State
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
+  const [notifyTitle, setNotifyTitle] = useState("");
+  const [notifyBody, setNotifyBody] = useState("");
+  const [notifyLoading, setNotifyLoading] = useState(false);
 
-  useEffect(() => {
-    if (!token) return;
-    const fetchGrades = async () => {
-      try {
-        const res = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setGrades(Array.isArray(json) ? json : (json.data ?? []));
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load grades.",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchGrades();
-  }, [token]);
+  // 1. Fetch Users Query
+  const { data: users = [], isLoading: loading } = useQuery<AccountUser[], Error>({
+    queryKey: ["users"],
+    queryFn: async ({ signal }) => {
+      const json = await apiClient.get<any>("/accounts/get-accounts", signal);
+      const arr: AccountUser[] = Array.isArray(json.data) ? json.data : [];
+      return arr.filter((u) => u.type === "student");
+    },
+    enabled: !!token,
+  });
 
-  // Fetch user progress when a user is selected
-  useEffect(() => {
-    if (!selectedUser || !token) return;
-    setUserProgress(null);
-    const fetchProgress = async () => {
-      setProgressLoading(true);
-      try {
-        const res = await fetch(
-          `${API_URL}/progress/dashboard/user/${selectedUser.id}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setUserProgress(json);
-      } catch {
-        // Failed to load user progress
-      } finally {
-        setProgressLoading(false);
+  // 2. Fetch Grades Query
+  const { data: grades = [] } = useQuery<{ id: string; name: string }[], Error>({
+    queryKey: ["grades"],
+    queryFn: async ({ signal }) => {
+      const json = await apiClient.get<any>("/grades", signal);
+      return Array.isArray(json) ? json : (json.data ?? []);
+    },
+    enabled: !!token,
+  });
+
+  // 3. Fetch User Progress Query
+  const { data: userProgress = null, isLoading: progressLoading } = useQuery<UserProgress | null, Error>({
+    queryKey: ["user-progress", selectedUser?.id],
+    queryFn: async ({ signal }) => {
+      if (!selectedUser) return null;
+      return apiClient.get<UserProgress>(`/progress/dashboard/user/${selectedUser.id}`, signal);
+    },
+    enabled: !!selectedUser && !!token,
+  });
+
+  // Actions Mutations
+  const togglePremiumMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiClient.post(`/accounts/${userId}/premium`);
+    },
+    onMutate: () => {
+      setActionLoading("premium");
+    },
+    onSuccess: (_, userId) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      if (selectedUser && selectedUser.id === userId) {
+        const newStatus = selectedUser.status === "premium" ? "free" : "premium";
+        setSelectedUser({ ...selectedUser, status: newStatus });
       }
-    };
-    fetchProgress();
-  }, [selectedUser?.id, token]);
+      toast({
+        title: "Success",
+        description: "Premium status toggled successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to toggle premium status.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setActionLoading(null);
+    }
+  });
+
+  const handleTogglePremium = () => {
+    if (selectedUser) togglePremiumMutation.mutate(selectedUser.id);
+  };
+
+  const toggleSuspendMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiClient.post(`/accounts/${userId}/suspend`);
+    },
+    onMutate: () => {
+      setActionLoading("suspend");
+    },
+    onSuccess: (_, userId) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      if (selectedUser && selectedUser.id === userId) {
+        setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive });
+      }
+      toast({
+        title: "Success",
+        description: "Suspension status updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update suspension status.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setActionLoading(null);
+    }
+  });
+
+  const handleToggleSuspend = () => {
+    if (selectedUser) toggleSuspendMutation.mutate(selectedUser.id);
+  };
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiClient.post<{ password?: string }>(`/accounts/${userId}/reset-password`);
+    },
+    onMutate: () => {
+      setActionLoading("password");
+    },
+    onSuccess: (data) => {
+      if (data && data.password) {
+        setNewPassword(data.password);
+      } else {
+        toast({
+          title: "Success",
+          description: "Password reset successfully.",
+        });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reset password.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setActionLoading(null);
+    }
+  });
+
+  const handleResetPassword = () => {
+    if (selectedUser) resetPasswordMutation.mutate(selectedUser.id);
+  };
+
+  const sendNotificationMutation = useMutation({
+    mutationFn: async ({ userId, title, body }: { userId: string; title: string; body: string }) => {
+      await apiClient.post(`/accounts/${userId}/notify`, { title, body });
+    },
+    onMutate: () => {
+      setNotifyLoading(true);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Push notification sent successfully.",
+      });
+      setNotifyDialogOpen(false);
+      setNotifyTitle("");
+      setNotifyBody("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send push notification.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setNotifyLoading(false);
+    }
+  });
+
+  const handleSendNotification = () => {
+    if (selectedUser && notifyTitle.trim() && notifyBody.trim()) {
+      sendNotificationMutation.mutate({
+        userId: selectedUser.id,
+        title: notifyTitle,
+        body: notifyBody,
+      });
+    }
+  };
 
   const filtered = users.filter((u: any) => {
     if (
@@ -517,26 +627,120 @@ const UsersPage = () => {
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" className="text-xs">
-                <Crown className="h-3 w-3 mr-1" /> Grant Premium
+              <Button
+                size="sm"
+                className="text-xs"
+                onClick={handleTogglePremium}
+                disabled={actionLoading === "premium"}
+              >
+                <Crown className="h-3 w-3 mr-1" />
+                {actionLoading === "premium" ? "Updating..." : selectedUser.status === "premium" ? "Revoke Premium" : "Grant Premium"}
               </Button>
-              <Button variant="outline" size="sm" className="text-xs">
-                <Key className="h-3 w-3 mr-1" /> Reset Password
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={handleResetPassword}
+                disabled={actionLoading === "password"}
+              >
+                <Key className="h-3 w-3 mr-1" />
+                {actionLoading === "password" ? "Resetting..." : "Reset Password"}
               </Button>
-              <Button variant="outline" size="sm" className="text-xs">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => setNotifyDialogOpen(true)}
+              >
                 <Mail className="h-3 w-3 mr-1" /> Send Message
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs text-destructive"
+                className={cn(
+                  "text-xs",
+                  selectedUser.isActive
+                    ? "text-destructive hover:bg-destructive/5"
+                    : "text-success border-success/30 hover:bg-success/5"
+                )}
+                onClick={handleToggleSuspend}
+                disabled={actionLoading === "suspend"}
               >
-                <Ban className="h-3 w-3 mr-1" /> Suspend
+                <Ban className="h-3 w-3 mr-1" />
+                {actionLoading === "suspend" ? "Updating..." : selectedUser.isActive ? "Suspend" : "Unsuspend"}
               </Button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Reset Password Modal */}
+      <Dialog open={!!newPassword} onOpenChange={(v) => !v && setNewPassword(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Password Reset Successful</DialogTitle>
+            <DialogDescription>
+              A new random password has been generated for <strong>{selectedUser?.name}</strong>. Please copy it and share it with the user securely.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 p-3 bg-muted rounded-lg border font-mono text-center justify-center text-lg font-bold select-all">
+            {newPassword}
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setNewPassword(null)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Notification Modal */}
+      <Dialog open={notifyDialogOpen} onOpenChange={setNotifyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Push Notification</DialogTitle>
+            <DialogDescription>
+              This message will be sent directly to <strong>{selectedUser?.name}</strong>'s device as a push notification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="title">Notification Title *</Label>
+              <Input
+                id="title"
+                placeholder="Enter title..."
+                value={notifyTitle}
+                onChange={(e) => setNotifyTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="body">Message Body *</Label>
+              <Textarea
+                id="body"
+                placeholder="Enter message text..."
+                value={notifyBody}
+                onChange={(e) => setNotifyBody(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setNotifyDialogOpen(false)}
+              disabled={notifyLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendNotification}
+              disabled={notifyLoading || !notifyTitle.trim() || !notifyBody.trim()}
+            >
+              {notifyLoading ? "Sending..." : "Send Message"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

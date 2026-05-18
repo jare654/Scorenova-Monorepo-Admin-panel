@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
+import { BackendGrade } from "@/types";
 
 export interface GradeStat {
   grade: string;
@@ -15,56 +16,58 @@ interface UseGradeStatsReturn {
 
 export function useGradeStats(): UseGradeStatsReturn {
   const { token } = useAuth();
-  const [questionsByGrade, setQuestionsByGrade] = useState<GradeStat[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!token) return;
+  const { data: questionsByGrade = [], isLoading: loading, error } = useQuery<GradeStat[], Error>({
+    queryKey: ["grade-stats"],
+    queryFn: async ({ signal }) => {
+      const gradesJson = await apiClient.get<any>("/grades", signal);
+      const grades: BackendGrade[] = Array.isArray(gradesJson)
+        ? gradesJson
+        : (gradesJson.data ?? []);
 
-    const fetchGradeStats = async () => {
-      setLoading(true);
-      setError(null);
       try {
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-
-        const gradesJson = await gradesRes.json();
-        const grades: { id: string; name: string }[] = Array.isArray(gradesJson)
-          ? gradesJson
-          : (gradesJson.data ?? []);
-
-        const stats = await Promise.all(
-          grades.map(async (g) => {
-            try {
-              const res = await fetch(`${API_URL}/grades/${g.id}/statistics`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) return { grade: `Grade ${g.name}`, questions: 0 };
-              const json = await res.json();
-              return {
-                grade: `Grade ${json.gradeName}`,
-                questions: json.totalQuestions ?? 0,
-              };
-            } catch {
-              return { grade: `Grade ${g.name}`, questions: 0 };
-            }
-          }),
-        );
-
-        setQuestionsByGrade(stats);
-      } catch (err) {
-        // useGradeStats failed
-        setError("Failed to load grade statistics.");
-      } finally {
-        setLoading(false);
+        // Step A: Attempt a single bulk analytics query (1 request)
+        const bulkStats = await apiClient.get<any>("/grades/all/statistics", signal);
+        const bulkArr = Array.isArray(bulkStats) ? bulkStats : (bulkStats.data ?? []);
+        if (bulkArr.length > 0) {
+          return bulkArr.map((item: any) => ({
+            grade: item.gradeName,
+            questions: item.totalQuestions ?? 0,
+          }));
+        }
+      } catch (e) {
+        // Fallback if bulk statistics is not yet deployed on server
       }
-    };
 
-    fetchGradeStats();
-  }, [token]);
+      // Step B: Backward compatibility fallback (sequential to prevent 429)
+      const stats: GradeStat[] = [];
+      for (const g of grades) {
+        try {
+          const json = await apiClient.get<any>(`/grades/${g.id}/statistics`, signal);
+          stats.push({
+            grade: `Grade ${json.gradeName}`,
+            questions: json.totalQuestions ?? 0,
+          });
+          // Wait 50ms between requests to respect rate limits
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        } catch {
+          stats.push({ grade: `Grade ${g.name}`, questions: 0 });
+        }
+      }
+      return stats;
+    },
+    enabled: !!token,
+    staleTime: Infinity, // Cache statistics permanently for the session
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
-  return { questionsByGrade, loading, error };
+  return {
+    questionsByGrade,
+    loading,
+    error: error ? error.message : null,
+  };
 }
+

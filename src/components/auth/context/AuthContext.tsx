@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AdminUser } from "@/types";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 type AuthContextType = {
   user: AdminUser | null;
@@ -43,39 +43,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         : normalized;
       const payloadPhone = stripped.slice(0, 9);
 
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          phoneNumber: payloadPhone,
-          password,
-          loginAs: "admin",
-          fcmId: "web-admin",
-        }),
+      const data = await apiClient.post<any>("/auth/login", {
+        phoneNumber: payloadPhone,
+        password,
+        loginAs: "admin",
+        fcmId: "web-admin",
       });
-
-      // log status and body for debugging 400 responses
-      if (!res.ok) {
-        let bodyText = "";
-        try {
-          bodyText = await res.text();
-        } catch (e) {
-          bodyText = String(e);
-        }
-
-        // try parse JSON message
-        try {
-          const parsed = JSON.parse(bodyText);
-          const msg = parsed?.message ?? bodyText;
-          return { success: false, message: Array.isArray(msg) ? msg.join(", ") : msg };
-        } catch {
-          return { success: false, message: "Login failed. Please check your credentials." };
-        }
-      }
-
-      const data = await res.json();
 
       const token = data?.accessToken;
 
@@ -98,8 +71,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         /* noop for non-browser env */
       }
       return { success: true };
-    } catch (error) {
-      return { success: false, message: "An error occurred. Please try again." };
+    } catch (error: any) {
+      return { success: false, message: error.message || "An error occurred. Please try again." };
     }
   };
 

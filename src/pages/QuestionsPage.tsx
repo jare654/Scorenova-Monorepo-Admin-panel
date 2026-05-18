@@ -22,8 +22,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import {
+  deleteQuestion,
+  deleteQuestionsBulk,
+  fetchGrades,
+  fetchQuestionById,
+  fetchQuestions,
+  fetchSubjects,
+  importQuestionsCsv,
+  type Grade,
+  type Question,
+  type Subject,
+} from "@/services/api/questions";
 
 const difficultyColors: Record<string, string> = {
   easy: "bg-success/10 text-success border-success/20",
@@ -31,13 +43,11 @@ const difficultyColors: Record<string, string> = {
   hard: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
-type Grade = { id: string; name: string };
-type Subject = { id: string; name: string; gradeId: string };
-
 const QuestionsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { token } = useAuth();
+  const queryClient = useQueryClient();
+  const { token, initialized } = useAuth();
 
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
@@ -46,212 +56,141 @@ const QuestionsPage = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
 
-  const [questions, setQuestions] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
-
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
-  const [gradesLoading, setGradesLoading] = useState(false);
-  const [subjectsLoading, setSubjectsLoading] = useState(false);
-
   // Delete dialog state
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [questionToDelete, setQuestionToDelete] = useState<any>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Bulk delete dialog
   const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
-  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
 
   const perPage = 10;
 
-  // Fetch grades on mount, then fetch subjects for all grades in parallel
-  useEffect(() => {
-    const fetchGrades = async () => {
-      setGradesLoading(true);
-      try {
-        const res = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const arr: Grade[] = Array.isArray(json) ? json : (json.data ?? []);
-        setGrades(arr);
+  // 1. Fetch grades using React Query
+  const {
+    data: grades = [],
+    isFetching: gradesLoading,
+    refetch: refetchGrades,
+  } = useQuery<Grade[], Error>({
+    queryKey: ["grades"],
+    queryFn: ({ signal }) => fetchGrades(signal),
+    enabled: false,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
 
-        setSubjectsLoading(true);
-        const results = await Promise.all(
-          arr.map(async (g) => {
-            try {
-              const sRes = await fetch(`${API_URL}/subjects?gradeId=${g.id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!sRes.ok) return [];
-              const sJson = await sRes.json();
-              const sArr = Array.isArray(sJson) ? sJson : (sJson.data ?? []);
-              return sArr.map((s: any) => ({
-                ...s,
-                gradeId: s.gradeId ?? g.id,
-              }));
-            } catch {
-              return [];
-            }
-          }),
-        );
-        setAllSubjects(results.flat());
-        setSubjectsLoading(false);
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load grades.",
-          variant: "destructive",
-        });
-      } finally {
-        setGradesLoading(false);
-      }
-    };
-    fetchGrades();
-  }, [token]);
+  // 2. Fetch subjects for the selected grade using React Query (prevents concurrent spam and 429)
+  const {
+    data: subjects = [],
+    isFetching: subjectsLoading,
+    refetch: refetchSubjects,
+  } = useQuery<Subject[], Error>({
+    queryKey: ["subjects", gradeFilter],
+    queryFn: ({ signal }) =>
+      fetchSubjects(gradeFilter === "all" ? undefined : gradeFilter, signal),
+    enabled: false,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
 
-  const filteredSubjects =
-    gradeFilter === "all"
-      ? allSubjects
-      : allSubjects.filter((s) => s.gradeId === gradeFilter);
+  const filteredSubjects = gradeFilter === "all"
+    ? subjects
+    : subjects.filter((subject) => subject.gradeId === gradeFilter);
 
+  // Clear subject filter when grade changes
   useEffect(() => {
     setSubjectFilter("all");
     setPage(1);
   }, [gradeFilter]);
 
-  // Fetch questions with debounce
-  useEffect(() => {
-    const fetchQuestions = async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({
-          page: String(page),
-          limit: String(perPage),
-          random: "false",
-          withExplanation: "false",
-        });
+  // 3. Fetch questions using React Query (with page and filters)
+  const { data: questionsQueryData, isLoading: loading } = useQuery<{ data: any[]; total: number; totalPages: number }, Error>({
+    queryKey: ["questions", page, gradeFilter, subjectFilter],
+    queryFn: ({ signal }) =>
+      fetchQuestions(
+        {
+          page,
+          limit: perPage,
+          gradeId: gradeFilter === "all" ? undefined : gradeFilter,
+          subjectId: subjectFilter === "all" ? undefined : subjectFilter,
+          difficulty:
+            difficultyFilter === "all" ? undefined : difficultyFilter,
+        },
+        signal,
+      ),
+    enabled: initialized && !!token,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
 
-        if (subjectFilter !== "all") params.append("subjectId", subjectFilter);
+  const questions = questionsQueryData?.data ?? [];
+  const total = questionsQueryData?.total ?? 0;
+  const totalPages = questionsQueryData?.totalPages ?? 1;
 
-        const res = await fetch(`${API_URL}/questions?${params.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!res.ok) {
-          if (res.status === 500) {
-            setQuestions([]);
-            setTotal(0);
-            setTotalPages(1);
-            return;
-          } else if (res.status === 429) {
-            toast({
-              title: "Too Many Requests",
-              description: "Please wait a moment and try again.",
-              variant: "destructive",
-            });
-          } else {
-            toast({
-              title: "Error",
-              description: `Failed to load questions (${res.status}).`,
-              variant: "destructive",
-            });
-          }
-          setQuestions([]);
-          setTotal(0);
-          setTotalPages(1);
-          return;
-        }
-
-        const json = await res.json();
-        setQuestions(json.data || []);
-        setTotal(json.total || 0);
-        setTotalPages(json.totalPages || 1);
-      } catch (error) {
-        // Network error
-        toast({
-          title: "Network Error",
-          description: "Failed to connect to server.",
-          variant: "destructive",
-        });
-        setQuestions([]);
-        setTotal(0);
-        setTotalPages(1);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const timer = setTimeout(fetchQuestions, 400);
-    return () => clearTimeout(timer);
-  }, [page, gradeFilter, subjectFilter, difficultyFilter, token]);
-
-  // ── Delete single question
-  const handleDelete = async () => {
-    if (!questionToDelete) return;
-    setDeleteLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/questions/${questionToDelete.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setQuestions((prev) => prev.filter((q) => q.id !== questionToDelete.id));
-      setTotal((prev) => prev - 1);
+  // 4. Delete Mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await deleteQuestion(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
       toast({
         title: "Deleted",
         description: "Question deleted successfully.",
       });
       setDeleteDialog(false);
       setQuestionToDelete(null);
-    } catch {
+    },
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to delete question.",
+        description: error.message || "Failed to delete question.",
         variant: "destructive",
       });
-    } finally {
-      setDeleteLoading(false);
+    },
+  });
+
+  const deleteLoading = deleteMutation.isPending;
+  const handleDelete = () => {
+    if (questionToDelete) {
+      deleteMutation.mutate(questionToDelete.id);
     }
   };
 
-  // ── Bulk delete
-  const handleBulkDelete = async () => {
-    setBulkDeleteLoading(true);
-    try {
-      await Promise.all(
-        Array.from(selected).map((id) =>
-          fetch(`${API_URL}/questions/${id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ),
-      );
-      setQuestions((prev) => prev.filter((q) => !selected.has(q.id)));
-      setTotal((prev) => prev - selected.size);
+  // 5. Bulk Delete Mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await deleteQuestionsBulk(ids);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
       toast({
         title: "Deleted",
         description: `${selected.size} questions deleted.`,
       });
       setSelected(new Set());
       setBulkDeleteDialog(false);
-    } catch {
+    },
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to delete some questions.",
+        description: error.message || "Failed to delete some questions.",
         variant: "destructive",
       });
-    } finally {
-      setBulkDeleteLoading(false);
-    }
+    },
+  });
+
+  const bulkDeleteLoading = bulkDeleteMutation.isPending;
+  const handleBulkDelete = () => {
+    bulkDeleteMutation.mutate(Array.from(selected));
   };
 
   const toggleSelect = (id: string) => {
@@ -268,12 +207,12 @@ const QuestionsPage = () => {
     }
   };
 
-  const filterQuestionsFrontend = (questions: any[]) => {
-    let filtered = [...questions];
+  const filterQuestionsFrontend = (questionsList: any[]) => {
+    let filtered = [...questionsList];
 
     if (gradeFilter !== "all") {
       filtered = filtered.filter((q) => {
-        const subject = allSubjects.find((s) => s.id === q.subjectId);
+        const subject = subjects.find((s) => s.id === q.subjectId);
         return subject?.gradeId === gradeFilter;
       });
     }
@@ -299,25 +238,10 @@ const QuestionsPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     setImportLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/questions/upload-csv`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.message || `HTTP ${res.status}`);
-      }
+      const result = await importQuestionsCsv(file);
 
       if (result.success) {
         toast({
@@ -402,6 +326,11 @@ const QuestionsPage = () => {
             setGradeFilter(v);
             setPage(1);
           }}
+          onOpenChange={(open) => {
+            if (open) {
+              refetchGrades();
+            }
+          }}
         >
           <SelectTrigger className="w-32">
             <SelectValue placeholder={gradesLoading ? "Loading..." : "Grade"} />
@@ -421,6 +350,11 @@ const QuestionsPage = () => {
           onValueChange={(v) => {
             setSubjectFilter(v);
             setPage(1);
+          }}
+          onOpenChange={(open) => {
+            if (open) {
+              refetchSubjects();
+            }
           }}
         >
           <SelectTrigger className="w-40">
@@ -549,10 +483,9 @@ const QuestionsPage = () => {
               </tr>
             ) : (
               displayedQuestions.map((q) => {
-                const subject = allSubjects.find((s) => s.id === q.subjectId);
-                const subjectName = subject?.name ?? "—";
-                const grade = grades.find((g) => g.id === subject?.gradeId);
-                const gradeName = grade?.name ?? "—";
+                const subject = subjects.find((s) => s.id === q.subjectId);
+                const subjectName = q.subjectName ?? subject?.name ?? "—";
+                const gradeName = q.gradeName ?? grades.find((g) => g.id === subject?.gradeId)?.name ?? "—";
 
                 return (
                   <tr
@@ -602,19 +535,7 @@ const QuestionsPage = () => {
                           className="h-8 w-8"
                           onClick={async () => {
                             try {
-                              const res = await fetch(
-                                `${API_URL}/questions/${q.id}/edit`,
-                                {
-                                  headers: {
-                                    Authorization: `Bearer ${token}`,
-                                  },
-                                },
-                              );
-
-                              if (!res.ok)
-                                throw new Error(`HTTP ${res.status}`);
-
-                              const fullQuestion = await res.json();
+                              const fullQuestion = await fetchQuestionById(q.id);
 
                               navigate("/questions/new", {
                                 state: { question: fullQuestion, isEdit: true },

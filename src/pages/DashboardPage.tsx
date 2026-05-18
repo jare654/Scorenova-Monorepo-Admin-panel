@@ -27,7 +27,7 @@ import {
 } from "recharts";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useAccounts } from "@/components/auth/context/Accountcontext";
-import { API_URL } from "@/lib/api";
+import { useGradeStats } from "@/hooks/Usegradestats";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const COLORS = ["hsl(224,76%,33%)", "hsl(173,58%,39%)", "hsl(24,95%,53%)"];
@@ -45,55 +45,8 @@ const DashboardPage = () => {
     loading: accountsLoading,
   } = useAccounts();
 
-  // ── Grade stats — local to dashboard only ─────────────────────────────────
-  const [questionsByGrade, setQuestionsByGrade] = useState<
-    { grade: string; questions: number }[]
-  >([]);
-  const [gradeStatsLoading, setGradeStatsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!token) return;
-
-    const fetchGradeStats = async () => {
-      setGradeStatsLoading(true);
-      try {
-        const gradesRes = await fetch(`${API_URL}/grades`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!gradesRes.ok) throw new Error(`HTTP ${gradesRes.status}`);
-        const gradesJson = await gradesRes.json();
-        const grades: { id: string; name: string }[] = Array.isArray(gradesJson)
-          ? gradesJson
-          : (gradesJson.data ?? []);
-
-        const stats = await Promise.all(
-          grades.map(async (g) => {
-            try {
-              const res = await fetch(`${API_URL}/grades/${g.id}/statistics`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) return { grade: `Grade ${g.name}`, questions: 0 };
-              const json = await res.json();
-              return {
-                grade: `Grade ${json.gradeName}`,
-                questions: json.totalQuestions ?? 0,
-              };
-            } catch {
-              return { grade: `Grade ${g.name}`, questions: 0 };
-            }
-          }),
-        );
-
-        setQuestionsByGrade(stats);
-      } catch {
-        // Failed to load grade statistics
-      } finally {
-        setGradeStatsLoading(false);
-      }
-    };
-
-    fetchGradeStats();
-  }, [token]);
+  // ── Grade stats — fetched via react-query hook ─────────────────────────
+  const { questionsByGrade, loading: gradeStatsLoading } = useGradeStats();
 
   return (
     <div className="space-y-4 sm:space-y-6">
