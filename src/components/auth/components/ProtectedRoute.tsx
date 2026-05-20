@@ -8,7 +8,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return null;
   }
 
-  if (!token || user?.role !== "Super Admin") {
+  const role = user?.role?.toLowerCase() ?? "";
+  const isAdmin = role.includes("admin");
+
+  if (!token || !isAdmin) {
     return <Navigate to="/login" replace />;
   }
   return children;

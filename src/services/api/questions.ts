@@ -1,6 +1,14 @@
 import { apiClient } from "./client";
 
+// ─── Entity types ─────────────────────────────────────────────────────────────
+
 export interface Grade {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface Stream {
   id: string;
   name: string;
   description?: string | null;
@@ -10,8 +18,8 @@ export interface Subject {
   id: string;
   name: string;
   description?: string | null;
-  gradeId?: string | null;
-  gradeName?: string | null;
+  streamId?: string | null;
+  gradeId?: string | null; // kept for backward compat — may be null on new subjects
 }
 
 export interface Topic {
@@ -29,13 +37,20 @@ export interface Question {
   correctAnswer: string;
   difficulty: string;
   explanation?: string | null;
-  gradeId?: string | null;
-  gradeName?: string | null;
   subjectId?: string | null;
   subjectName?: string | null;
   topicId?: string | null;
   topicName?: string | null;
   accuracy?: number | null;
+}
+
+export interface QuestionExplanation {
+  questionId: string;
+  stepByStep: string;
+  clear: string;
+  simplified: string;
+  usageCount: number;
+  createdAt: string;
 }
 
 export interface QuestionStatistics {
@@ -53,10 +68,12 @@ export interface QuestionListResponse {
   totalPages: number;
 }
 
+// ─── Filter / input types ─────────────────────────────────────────────────────
+
 export interface QuestionFilters {
   page?: number;
   limit?: number;
-  gradeId?: string;
+  streamId?: string;   // replaces gradeId — filter by curriculum stream
   subjectId?: string;
   topicId?: string;
   difficulty?: string;
@@ -79,11 +96,19 @@ export interface CreateNamedEntityInput {
 }
 
 export interface CreateSubjectInput extends CreateNamedEntityInput {
-  gradeId: string;
+  streamId: string;  // subjects now belong to streams, not grades
 }
 
 export interface CreateTopicInput extends CreateNamedEntityInput {
   subjectId: string;
+}
+
+export interface BulkUploadResult {
+  success: boolean;
+  created: number;
+  skipped: number;
+  errors: Array<{ row: number; reason: string }>;
+  message?: string;
 }
 
 export interface ExplainQuestionInput {
@@ -91,6 +116,7 @@ export interface ExplainQuestionInput {
   correctAnswer: string;
   subject: string;
   topic: string;
+  options?: string[];
 }
 
 export interface ExplainQuestionResponse {
@@ -99,20 +125,7 @@ export interface ExplainQuestionResponse {
   simplified?: string;
 }
 
-export interface CsvImportResult {
-  success?: boolean;
-  created?: number;
-  updated?: number;
-  skipped?: number;
-  missingDependencies?: {
-    grades?: string[];
-    subjects?: Array<{ subject: string; grade: string }>;
-    topics?: Array<{ topic: string; subject: string }>;
-  };
-  errors?: Array<Record<string, unknown>>;
-  warnings?: Array<Record<string, unknown>>;
-  message?: string;
-}
+// ─── Cache helpers ────────────────────────────────────────────────────────────
 
 const LIST_CACHE_TTL_MS = 60 * 1000;
 const inflightRequests = new Map<string, Promise<unknown>>();
@@ -127,11 +140,8 @@ async function withCache<T>(key: string, fetcher: () => Promise<T>): Promise<T> 
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data as T;
   }
-
   const existing = inflightRequests.get(key);
-  if (existing) {
-    return existing as Promise<T>;
-  }
+  if (existing) return existing as Promise<T>;
 
   const promise = fetcher()
     .then((data) => {
@@ -148,6 +158,19 @@ async function withCache<T>(key: string, fetcher: () => Promise<T>): Promise<T> 
   return promise;
 }
 
+// ─── Streams ──────────────────────────────────────────────────────────────────
+
+export async function fetchStreams(signal?: AbortSignal): Promise<Stream[]> {
+  return withCache(getCacheKey("streams"), async () => {
+    const payload = await apiClient.get<unknown>("/streams", signal, {
+      retries: 0,
+    });
+    return normalizeCollection<Stream>(payload);
+  });
+}
+
+// ─── Grades ───────────────────────────────────────────────────────────────────
+
 export async function fetchGrades(signal?: AbortSignal): Promise<Grade[]> {
   return withCache(getCacheKey("grades"), async () => {
     const payload = await apiClient.get<unknown>("/grades", signal, {
@@ -157,12 +180,14 @@ export async function fetchGrades(signal?: AbortSignal): Promise<Grade[]> {
   });
 }
 
+// ─── Subjects ─────────────────────────────────────────────────────────────────
+
 export async function fetchSubjects(
-  gradeId?: string,
+  streamId?: string,
   signal?: AbortSignal,
 ): Promise<Subject[]> {
-  const query = gradeId ? `?gradeId=${encodeURIComponent(gradeId)}` : "";
-  const cacheKey = getCacheKey("subjects", gradeId ?? "all");
+  const query = streamId ? `?streamId=${encodeURIComponent(streamId)}` : "";
+  const cacheKey = getCacheKey("subjects", streamId ?? "all");
   return withCache(cacheKey, async () => {
     const payload = await apiClient.get<unknown>(`/subjects${query}`, signal, {
       retries: 0,
@@ -170,6 +195,8 @@ export async function fetchSubjects(
     return normalizeCollection<Subject>(payload);
   });
 }
+
+// ─── Topics ───────────────────────────────────────────────────────────────────
 
 export async function fetchTopics(
   subjectId?: string,
@@ -185,19 +212,21 @@ export async function fetchTopics(
   });
 }
 
+// ─── Questions ────────────────────────────────────────────────────────────────
+
 export async function fetchQuestions(
   filters: QuestionFilters = {},
   signal?: AbortSignal,
 ): Promise<QuestionListResponse> {
   const params = new URLSearchParams();
 
-  if (filters.page) params.set("page", String(filters.page));
-  if (filters.limit) params.set("limit", String(filters.limit));
-  if (filters.gradeId) params.set("gradeId", filters.gradeId);
-  if (filters.subjectId) params.set("subjectId", filters.subjectId);
-  if (filters.topicId) params.set("topicId", filters.topicId);
+  if (filters.page)       params.set("page", String(filters.page));
+  if (filters.limit)      params.set("limit", String(filters.limit));
+  if (filters.streamId)   params.set("streamId", filters.streamId);
+  if (filters.subjectId)  params.set("subjectId", filters.subjectId);
+  if (filters.topicId)    params.set("topicId", filters.topicId);
   if (filters.difficulty) params.set("difficulty", filters.difficulty);
-  if (filters.search) params.set("search", filters.search);
+  if (filters.search)     params.set("search", filters.search);
 
   const query = params.toString();
   const payload = await apiClient.get<unknown>(
@@ -208,7 +237,10 @@ export async function fetchQuestions(
   return normalizePagedQuestions(payload, filters);
 }
 
-export async function fetchQuestionById(id: string, signal?: AbortSignal): Promise<Question> {
+export async function fetchQuestionById(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Question> {
   const payload = await apiClient.get<unknown>(`/questions/${id}/edit`, signal);
   return normalizeSingle<Question>(payload);
 }
@@ -218,7 +250,10 @@ export async function fetchQuestionStatistics(
   signal?: AbortSignal,
 ): Promise<QuestionStatistics | null> {
   try {
-    const payload = await apiClient.get<unknown>(`/questions/${id}/statistics`, signal);
+    const payload = await apiClient.get<unknown>(
+      `/questions/${id}/statistics`,
+      signal,
+    );
     const normalized = normalizeSingle<QuestionStatistics>(payload);
     return {
       totalAttempts: Number(normalized.totalAttempts ?? 0),
@@ -231,12 +266,47 @@ export async function fetchQuestionStatistics(
   }
 }
 
-export async function createGrade(input: CreateNamedEntityInput): Promise<Grade> {
+// ─── Question explanations ────────────────────────────────────────────────────
+
+export async function fetchQuestionExplanation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<QuestionExplanation | null> {
+  try {
+    const payload = await apiClient.get<unknown>(
+      `/questions/${id}/explanations`,
+      signal,
+    );
+    return normalizeSingle<QuestionExplanation>(payload);
+  } catch {
+    return null;
+  }
+}
+
+export async function generateQuestionExplanation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<QuestionExplanation> {
+  const payload = await apiClient.post<unknown>(
+    `/questions/${id}/explanations/generate`,
+    undefined,
+    signal,
+  );
+  return normalizeSingle<QuestionExplanation>(payload);
+}
+
+// ─── Mutations ────────────────────────────────────────────────────────────────
+
+export async function createGrade(
+  input: CreateNamedEntityInput,
+): Promise<Grade> {
   const payload = await apiClient.post<unknown>("/grades", input);
   return normalizeSingle<Grade>(payload);
 }
 
-export async function createSubject(input: CreateSubjectInput): Promise<Subject> {
+export async function createSubject(
+  input: CreateSubjectInput,
+): Promise<Subject> {
   const payload = await apiClient.post<unknown>("/subjects", input);
   return normalizeSingle<Subject>(payload);
 }
@@ -263,16 +333,23 @@ export async function deleteQuestion(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/questions/${id}`);
 }
 
-export async function deleteQuestionsBulk(ids: string[]): Promise<{ deleted: number } | void> {
+export async function deleteQuestionsBulk(
+  ids: string[],
+): Promise<{ deleted: number } | void> {
   if (!ids.length) return;
   return apiClient.post<{ deleted: number }>("/questions/bulk-delete", { ids });
 }
 
-export async function importQuestionsCsv(file: File): Promise<CsvImportResult> {
+export async function bulkUploadQuestions(
+  file: File,
+): Promise<BulkUploadResult> {
   const formData = new FormData();
   formData.append("file", file);
-  const payload = await apiClient.post<unknown>("/questions/upload-csv", formData);
-  return normalizeSingle<CsvImportResult>(payload);
+  const payload = await apiClient.post<unknown>(
+    "/questions/bulk-upload",
+    formData,
+  );
+  return normalizeSingle<BulkUploadResult>(payload);
 }
 
 export async function explainQuestion(
@@ -281,29 +358,22 @@ export async function explainQuestion(
   const payload = await apiClient.post<unknown>("/ai/explain", input);
   const normalized = normalizeSingle<ExplainQuestionResponse>(payload);
   return {
-    stepByStep: normalized.stepByStep ?? normalized.clear ?? normalized.simplified ?? "",
-    clear: normalized.clear ?? normalized.stepByStep ?? normalized.simplified ?? "",
-    simplified: normalized.simplified ?? normalized.stepByStep ?? normalized.clear ?? "",
+    stepByStep:
+      normalized.stepByStep ?? normalized.clear ?? normalized.simplified ?? "",
+    clear:
+      normalized.clear ?? normalized.stepByStep ?? normalized.simplified ?? "",
+    simplified:
+      normalized.simplified ?? normalized.stepByStep ?? normalized.clear ?? "",
   };
 }
 
-export async function fetchAllSubjectsForGrades(grades: Grade[]): Promise<Subject[]> {
-  const collected: Subject[] = [];
-
-  for (const grade of grades) {
-    const subjects = await fetchSubjects(grade.id);
-    collected.push(...subjects);
-  }
-
-  return collected;
-}
+// ─── Normalizers ──────────────────────────────────────────────────────────────
 
 function normalizeSingle<T>(payload: unknown): T {
   if (isRecord(payload)) {
     if (isRecord(payload.data)) return payload.data as T;
     if (Array.isArray(payload.data)) return payload.data as T;
   }
-
   return payload as T;
 }
 
@@ -330,19 +400,18 @@ function normalizePagedQuestions(
       totalPages: 1,
     };
   }
-
   if (isRecord(payload)) {
-    const data = normalizeCollection<Question>(payload.data ?? payload.items ?? payload.results);
+    const data = normalizeCollection<Question>(
+      payload.data ?? payload.items ?? payload.results,
+    );
     const total = Number(payload.total ?? data.length);
     const limit = Number(payload.limit ?? filters.limit ?? data.length);
     const page = Number(payload.page ?? filters.page ?? 1);
     const totalPages = Number(
       payload.totalPages ?? Math.max(1, Math.ceil(total / Math.max(limit, 1))),
     );
-
     return { data, total, page, limit, totalPages };
   }
-
   return {
     data: [],
     total: 0,

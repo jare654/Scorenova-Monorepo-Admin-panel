@@ -29,31 +29,7 @@ let getQueue: Promise<void> = Promise.resolve();
 const getCooldownUntil = new Map<string, number>();
 
 async function enqueueGet<T>(key: string, work: () => Promise<T>): Promise<T> {
-  let resolveQueue: () => void;
-  const next = new Promise<void>((resolve) => {
-    resolveQueue = resolve;
-  });
-
-  const prev = getQueue;
-  getQueue = prev.then(() => next);
-
-  await prev;
-
-  const now = Date.now();
-  const cooldownUntil = getCooldownUntil.get(key) ?? 0;
-  const waitForCooldown = Math.max(0, cooldownUntil - now);
-  const waitForInterval = Math.max(0, GET_MIN_INTERVAL_MS - (now - lastGetRequestAt));
-  const waitMs = Math.max(waitForCooldown, waitForInterval);
-  if (waitMs > 0) {
-    await sleep(waitMs);
-  }
-
-  try {
-    return await work();
-  } finally {
-    lastGetRequestAt = Date.now();
-    resolveQueue!();
-  }
+  return work();
 }
 
 function getToken(): string | null {
@@ -122,6 +98,27 @@ async function parseResponse<T>(response: Response): Promise<T> {
       // noop
     }
     throw new Error("Session expired. Please log in again.");
+  }
+
+  if (response.status === 403) {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      try {
+        const json = await response.clone().json();
+        if (json?.data?.logout === true || json?.message === "User does not exist" || (typeof json?.message === "string" && json?.message.includes("User does not exist"))) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          try {
+            window.dispatchEvent(new Event("auth:logout"));
+          } catch {
+            // noop
+          }
+          throw new Error("Account has been suspended or deactivated.");
+        }
+      } catch {
+        // noop
+      }
+    }
   }
 
   if (!response.ok) {
