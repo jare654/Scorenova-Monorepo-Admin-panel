@@ -199,59 +199,43 @@ const AnalyticsPage = () => {
     staleTime: 30_000,
   });
 
-  // ── Radar ───────────────────────────────────────────────────────────────────
+  // ── Radar — uses single batch endpoint, no per-subject calls ───────────────
 
   const { data: radarPayload, isLoading: radarLoading } = useQuery({
     queryKey: ["analytics-radar"],
     queryFn: async () => {
-      const [streamsRaw, subjectsRaw] = await Promise.all([
+      // 3 requests total instead of N+2
+      const [streamsRaw, subjectsRaw, allProgressRaw] = await Promise.all([
         apiClient.get<any>("/streams"),
         apiClient.get<any>("/subjects"),
+        apiClient.get<any>("/progress/subjects/all"),
       ]);
 
       const streams: { id: string; name: string }[] = Array.isArray(streamsRaw)
         ? streamsRaw
-        : streamsRaw?.data ?? [];
+        : (streamsRaw?.data ?? []);
 
-      const subjects: {
-        id: string;
-        name: string;
-        streamId: string | null;
-      }[] = Array.isArray(subjectsRaw) ? subjectsRaw : subjectsRaw?.data ?? [];
+      const subjects: { id: string; name: string; streamId: string | null }[] =
+        Array.isArray(subjectsRaw) ? subjectsRaw : (subjectsRaw?.data ?? []);
 
-      const accuracyResults = await Promise.allSettled(
-        subjects.map((subject) =>
-          apiClient
-            .get<any>(`/progress/subject/${subject.id}`)
-            .then((res) => ({
-              subjectId: subject.id,
-              accuracy: unwrap<any>(res)?.accuracy ?? 0,
-            }))
-            .catch(() => ({ subjectId: subject.id, accuracy: 0 })),
-        ),
-      );
+      const allProgress: { subjectId: string; accuracy: number }[] =
+        Array.isArray(allProgressRaw) ? allProgressRaw : (allProgressRaw?.data ?? []);
 
+      // Build accuracy map from the single batch response
       const accuracyMap = new Map<string, number>(
-        accuracyResults
-          .filter((r) => r.status === "fulfilled")
-          .map((r) => {
-            const value = (r as PromiseFulfilledResult<any>).value;
-            return [value.subjectId, value.accuracy];
-          }),
+        allProgress.map((r) => [r.subjectId, r.accuracy]),
       );
 
       const subjectNames = [...new Set(subjects.map((s) => s.name))];
 
       const radarData = subjectNames.map((name) => {
         const entry: Record<string, string | number> = { subject: name };
-
         for (const stream of streams) {
           const match = subjects.find(
             (s) => s.name === name && s.streamId === stream.id,
           );
-          entry[stream.name] = match ? accuracyMap.get(match.id) ?? 0 : 0;
+          entry[stream.name] = match ? (accuracyMap.get(match.id) ?? 0) : 0;
         }
-
         return entry;
       });
 

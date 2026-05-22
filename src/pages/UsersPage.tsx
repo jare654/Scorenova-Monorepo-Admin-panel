@@ -78,6 +78,7 @@ const UsersPage = () => {
   const [actionLoading, setActionLoading]   = useState<string | null>(null);
   const [newPassword, setNewPassword]       = useState<string | null>(null);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
+  const [notifyChannel, setNotifyChannel]   = useState<"notification" | "sms" | "both">("notification");
   const [notifyTitle, setNotifyTitle]       = useState("");
   const [notifyBody, setNotifyBody]         = useState("");
   const [notifyLoading, setNotifyLoading]   = useState(false);
@@ -175,16 +176,19 @@ const UsersPage = () => {
   });
 
   const sendNotificationMutation = useMutation({
-    mutationFn: ({ userId, title, body }: { userId: string; title: string; body: string }) =>
-      apiClient.post(`/accounts/${userId}/notify`, { title, body }),
+    mutationFn: ({ userId, title, body, channel }: {
+      userId: string; title: string; body: string;
+      channel: "notification" | "sms" | "both";
+    }) => apiClient.post(`/accounts/${userId}/notify`, { title, body, channel }),
     onMutate:  () => setNotifyLoading(true),
     onSuccess: () => {
-      toast({ title: "Success", description: "Push notification sent successfully." });
+      toast({ title: "Success", description: "Message sent successfully." });
       setNotifyDialogOpen(false);
       setNotifyTitle("");
       setNotifyBody("");
+      setNotifyChannel("notification");
     },
-    onError:   () => toast({ title: "Error", description: "Failed to send push notification.", variant: "destructive" }),
+    onError:   () => toast({ title: "Error", description: "Failed to send message.", variant: "destructive" }),
     onSettled: () => setNotifyLoading(false),
   });
 
@@ -244,7 +248,12 @@ const UsersPage = () => {
 
   const handleSendNotification = () => {
     if (selectedUser && notifyTitle.trim() && notifyBody.trim()) {
-      sendNotificationMutation.mutate({ userId: selectedUser.id, title: notifyTitle, body: notifyBody });
+      sendNotificationMutation.mutate({
+        userId: selectedUser.id,
+        title: notifyTitle,
+        body: notifyBody,
+        channel: notifyChannel,
+      });
     }
   };
 
@@ -659,45 +668,115 @@ const UsersPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Send Notification Modal ── */}
-      <Dialog open={notifyDialogOpen} onOpenChange={setNotifyDialogOpen}>
+      {/* ── Send Message Modal — channel selector ── */}
+      <Dialog
+        open={notifyDialogOpen}
+        onOpenChange={(v) => {
+          if (!v) {
+            setNotifyDialogOpen(false);
+            setNotifyTitle("");
+            setNotifyBody("");
+            setNotifyChannel("notification");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Send Push Notification</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-primary" />
+              Send Message to {selectedUser?.name}
+            </DialogTitle>
             <DialogDescription>
-              This message will be sent to <strong>{selectedUser?.name}</strong>'s device.
+              Choose how to reach this student, then compose your message.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+
+          <div className="space-y-4 py-1">
+            {/* ── Channel selector ── */}
+            <div className="space-y-2">
+              <Label>Send via *</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { value: "notification", label: "Notification", icon: "🔔" },
+                    { value: "sms",          label: "SMS",          icon: "💬" },
+                    { value: "both",         label: "Both",         icon: "📣" },
+                  ] as const
+                ).map((ch) => (
+                  <button
+                    key={ch.value}
+                    type="button"
+                    onClick={() => setNotifyChannel(ch.value)}
+                    className={`flex flex-col items-center gap-1 rounded-lg border-2 py-3 px-2 text-xs font-medium transition-colors
+                      ${notifyChannel === ch.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-muted hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <span className="text-lg">{ch.icon}</span>
+                    {ch.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {notifyChannel === "notification" && "Sends a push notification to the student's device via Firebase."}
+                {notifyChannel === "sms"          && "Sends an SMS to the student's registered phone number."}
+                {notifyChannel === "both"         && "Sends both a push notification and an SMS simultaneously."}
+              </p>
+            </div>
+
+            {/* ── Title ── */}
             <div className="space-y-1">
-              <Label htmlFor="notify-title">Notification Title *</Label>
+              <Label htmlFor="notify-title">
+                {notifyChannel === "sms" ? "SMS Sender Label" : "Notification Title"} *
+              </Label>
               <Input
                 id="notify-title"
-                placeholder="Enter title..."
+                placeholder={notifyChannel === "sms" ? "e.g. Learnova" : "Enter title..."}
                 value={notifyTitle}
                 onChange={(e) => setNotifyTitle(e.target.value)}
               />
             </div>
+
+            {/* ── Body ── */}
             <div className="space-y-1">
-              <Label htmlFor="notify-body">Message Body *</Label>
+              <Label htmlFor="notify-body">Message *</Label>
               <Textarea
                 id="notify-body"
-                placeholder="Enter message text..."
+                placeholder="Enter your message..."
                 value={notifyBody}
                 onChange={(e) => setNotifyBody(e.target.value)}
                 rows={3}
               />
+              {notifyChannel !== "notification" && (
+                <p className="text-xs text-muted-foreground">
+                  SMS: {notifyBody.length}/160 characters
+                  {notifyBody.length > 160 && " — will be split into multiple messages"}
+                </p>
+              )}
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNotifyDialogOpen(false)} disabled={notifyLoading}>
+            <Button
+              variant="outline"
+              onClick={() => setNotifyDialogOpen(false)}
+              disabled={notifyLoading}
+            >
               Cancel
             </Button>
             <Button
               onClick={handleSendNotification}
               disabled={notifyLoading || !notifyTitle.trim() || !notifyBody.trim()}
             >
-              {notifyLoading ? "Sending..." : "Send Message"}
+              {notifyLoading ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Sending…</>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-1" />
+                  Send {notifyChannel === "both" ? "Both" : notifyChannel === "sms" ? "SMS" : "Notification"}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

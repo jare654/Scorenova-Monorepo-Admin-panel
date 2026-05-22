@@ -3,11 +3,9 @@ import {
   UserCheck,
   UserPlus,
   UserX,
-  DollarSign,
   Loader2,
 } from "lucide-react";
 import KPICard from "@/components/KPICard";
-import ActivityFeed from "@/components/ActivityFeed";
 import {
   XAxis,
   YAxis,
@@ -27,10 +25,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 const COLORS = ["hsl(224,76%,33%)", "hsl(173,58%,39%)", "hsl(24,95%,53%)"];
 
+// All 12 months abbreviated
+const ALL_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 const DashboardPage = () => {
   const isMobile = useIsMobile();
 
-  // ── From context (accounts fetched once app-wide) ─────────────────────────
   const {
     totalUsers,
     statusData,
@@ -38,72 +38,82 @@ const DashboardPage = () => {
     loading: accountsLoading,
   } = useAccounts();
 
-  // ── Grade stats — fetched via react-query hook ─────────────────────────
   const { questionsByGrade, loading: gradeStatsLoading } = useGradeStats();
 
   const today = new Date();
-  const activeStudentsCount = students.filter((s) => s.isActive).length;
+  const activeStudentsCount    = students.filter((s) => s.isActive).length;
   const suspendedStudentsCount = students.filter((s) => !s.isActive).length;
-  const trialStudentsCount = students.filter((s) => s.status === "trial").length;
-  const todayRegisteredCount = students.filter((s) => {
-    const joined = new Date(s.createdAt ?? s.joinedAt);
-    return joined.toDateString() === today.toDateString();
+  const trialStudentsCount     = students.filter((s) => s.status === "trial").length;
+  const todayRegisteredCount   = students.filter((s) => {
+    const d = new Date(s.createdAt ?? s.joinedAt);
+    return d.toDateString() === today.toDateString();
   }).length;
 
+  // ── Monthly gender chart — all 12 months of current year, all students ──
   const monthlyGenderData = (() => {
     const now = new Date();
-    const monthsToShow = 6;
-    const map: Record<string, { male: number; female: number }> = {};
-    const order: string[] = [];
+    const year = now.getFullYear();
 
-    for (let i = monthsToShow - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      map[key] = { male: 0, female: 0 };
-      order.push(key);
-    }
+    // Build all 12 month buckets for the current year
+    const buckets = ALL_MONTHS.map((mon, idx) => ({
+      month:  mon,
+      monthIndex: idx,
+      male:   0,
+      female: 0,
+    }));
 
+    if (students.length === 0) return buckets;
+
+    // Resolve the best available date for a student
+    const getDate = (s: typeof students[0]): Date | null => {
+      for (const raw of [s.joinedAt, s.createdAt]) {
+        if (!raw) continue;
+        const d = new Date(raw);
+        if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
+      }
+      return null;
+    };
+
+    // Place every student into their month bucket (current year only)
     students.forEach((s) => {
-      const joined = new Date(s.createdAt ?? s.joinedAt);
-      const key = joined.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      if (!map[key]) return;
-      const gender = (s.gender ?? "").toLowerCase();
-      if (gender === "male") map[key].male += 1;
-      else if (gender === "female") map[key].female += 1;
+      const d = getDate(s);
+      if (!d) return;
+      if (d.getFullYear() !== year) return; // skip students from other years
+      const bucket = buckets[d.getMonth()];
+      if (!bucket) return;
+      const g = (s.gender ?? "").toLowerCase().trim();
+      if (g === "female" || g === "f") bucket.female += 1;
+      else                              bucket.male   += 1; // male, unknown, or any other value
     });
 
-    return order.map((month) => ({ month, ...map[month] }));
+    return buckets;
   })();
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <KPICard
           title="Total Students"
           value={accountsLoading ? "—" : totalUsers}
-          trend={23}
-          trendLabel="Extra"
           icon={Users}
         />
         <KPICard
           title="Active Students"
           value={accountsLoading ? "—" : activeStudentsCount}
-          trend={12}
           icon={UserCheck}
           iconColor="text-success"
         />
         <KPICard
-          title="Today Registered Students"
+          title="Today Registered"
           value={accountsLoading ? "—" : todayRegisteredCount}
-          trend={8}
           icon={UserPlus}
           iconColor="text-primary"
         />
         <KPICard
           title="Suspended Students"
           value={accountsLoading ? "—" : suspendedStudentsCount}
-          trend={-3}
           icon={UserX}
           iconColor="text-destructive"
         />
@@ -112,58 +122,44 @@ const DashboardPage = () => {
           value={accountsLoading ? "—" : trialStudentsCount}
           icon={Users}
         />
-        <KPICard
-          title="Total Revenue"
-          value="45,678 ETB"
-          trend={34}
-          icon={DollarSign}
-          iconColor="text-secondary"
-        />
-        {/*
-        <KPICard
-          title="AI Cost"
-          value="345 ETB"
-          trend={5}
-          icon={Brain}
-          iconColor="text-accent"
-        />
-        <KPICard
-          title="Premium Users"
-          value="2,345 (18%)"
-          icon={Crown}
-          iconColor="text-warning"
-        />
-        <KPICard
-          title="Questions Answered"
-          value="234,567"
-          icon={HelpCircle}
-          iconColor="text-primary-light"
-        />
-        */}
       </div>
 
-      {/* ── Student Growth + Pie ───────────────────────────────────────────── */}
+      {/* ── Student Growth + Pie ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
         <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6 lg:col-span-2">
           <h3 className="mb-4 font-semibold text-card-foreground">
             Student Growth by Gender (Monthly)
           </h3>
-          {accountsLoading || monthlyGenderData.length === 0 ? (
+          {accountsLoading ? (
             <div className="flex h-[240px] items-center justify-center sm:h-[300px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
-              <BarChart data={monthlyGenderData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(214,32%,91%)"
+              <BarChart
+                data={monthlyGenderData}
+                margin={{ bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: isMobile ? 9 : 11 }}
+                  interval={0}
+                  angle={-30}
+                  textAnchor="end"
+                  height={55}
                 />
-                <XAxis dataKey="month" tick={{ fontSize: isMobile ? 10 : 12 }} interval={isMobile ? 1 : 0} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip
+                  formatter={(value, name) => [value, name]}
+                  labelFormatter={(label) => {
+                    const entry = monthlyGenderData.find((d) => d.month === label);
+                    const total = entry ? entry.male + entry.female : 0;
+                    return `${label}  (Total: ${total})`;
+                  }}
+                />
                 {!isMobile && <Legend />}
-                <Bar dataKey="male" fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} name="Male" />
+                <Bar dataKey="male"   fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} name="Male" />
                 <Bar dataKey="female" fill="hsl(173,58%,39%)" radius={[4, 4, 0, 0]} name="Female" />
               </BarChart>
             </ResponsiveContainer>
@@ -171,9 +167,7 @@ const DashboardPage = () => {
         </div>
 
         <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
-          <h3 className="mb-4 font-semibold text-card-foreground">
-            Premium vs Free
-          </h3>
+          <h3 className="mb-4 font-semibold text-card-foreground">Premium vs Free</h3>
           {accountsLoading || statusData.length === 0 ? (
             <div className="flex h-[240px] items-center justify-center sm:h-[300px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -188,9 +182,7 @@ const DashboardPage = () => {
                   innerRadius={60}
                   outerRadius={100}
                   dataKey="value"
-                  label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
-                  }
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 >
                   {statusData.map((_, i) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -203,12 +195,10 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* ── Grade Stats + Activity ─────────────────────────────────────────── */}
+      {/* ── Questions by Stream ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
         <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
-          <h3 className="mb-4 font-semibold text-card-foreground">
-            Questions by Stream
-          </h3>
+          <h3 className="mb-4 font-semibold text-card-foreground">Questions by Stream</h3>
           {gradeStatsLoading ? (
             <div className="flex h-[220px] items-center justify-center sm:h-[250px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -216,25 +206,17 @@ const DashboardPage = () => {
           ) : (
             <ResponsiveContainer width="100%" height={isMobile ? 220 : 250}>
               <BarChart data={questionsByGrade}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(214,32%,91%)"
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
                 <XAxis dataKey="grade" tick={{ fontSize: isMobile ? 10 : 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Bar
-                  dataKey="questions"
-                  fill="hsl(224,76%,33%)"
-                  radius={[4, 4, 0, 0]}
-                />
+                <Bar dataKey="questions" fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
-
-        {/* <ActivityFeed items={[]} /> */}
       </div>
+
     </div>
   );
 };
