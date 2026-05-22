@@ -25,3 +25,8 @@ dist-ssr
 vercel.json
 .vercel
 .env*.local
+
+# Kiro spec files
+.kiro/
+public/doc/
+public/docs/
