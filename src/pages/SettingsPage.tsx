@@ -19,9 +19,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { Plus, AlertTriangle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 const SettingsPage = () => {
   const { toast } = useToast();
@@ -57,17 +57,12 @@ const SettingsPage = () => {
   const [addLoading, setAddLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
-  const getToken = () => localStorage.getItem("token");
-
   // ── Fetch admins
   useEffect(() => {
     const fetchAdmins = async () => {
       setLoadingAdmins(true);
       try {
-        const res = await fetch(`${API_URL}/accounts/get-accounts`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        });
-        const json = await res.json();
+        const json = await apiClient.get<any>("/accounts/get-accounts");
         const adminList = (json?.data || []).filter(
           (u: any) => u.type !== "student",
         );
@@ -85,11 +80,7 @@ const SettingsPage = () => {
   useEffect(() => {
     const fetchToggles = async () => {
       try {
-        const res = await fetch(`${API_URL}/admin/feature-toggles/status`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        });
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await apiClient.get<any>("/admin/feature-toggles/status");
         setMockExams(json.mockExams ?? false);
         setShortAnswer(json.shortAnswerQuestions ?? false);
         setContentModeration(json.contentModeration ?? false);
@@ -104,12 +95,7 @@ const SettingsPage = () => {
   useEffect(() => {
     const fetchMilestoneStatus = async () => {
       try {
-        const res = await fetch(
-          `${API_URL}/notifications/admin/milestone-notifications/status`,
-          { headers: { Authorization: `Bearer ${getToken()}` } },
-        );
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await apiClient.get<any>("/notifications/admin/milestone-notifications/status");
         setUserMilestones(json.isEnabled ?? false);
       } catch {
         // Failed to fetch milestone notification status
@@ -126,16 +112,10 @@ const SettingsPage = () => {
   ) => {
     setter(newValue); // optimistic
     try {
-      const res = await fetch(`${API_URL}/admin/feature-toggles/toggle`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify({ feature, isEnabled: newValue }),
+      const json = await apiClient.post<any>("/admin/feature-toggles/toggle", {
+        feature,
+        isEnabled: newValue,
       });
-      if (!res.ok) throw new Error();
-      const json = await res.json();
       setMockExams(json.mockExams ?? false);
       setShortAnswer(json.shortAnswerQuestions ?? false);
       setContentModeration(json.contentModeration ?? false);
@@ -158,15 +138,9 @@ const SettingsPage = () => {
     setUserMilestones(newValue); // optimistic
     setMilestoneLoading(true);
     try {
-      const res = await fetch(
-        `${API_URL}/notifications/admin/milestone-notifications/toggle`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${getToken()}` },
-        },
+      const json = await apiClient.post<any>(
+        "/notifications/admin/milestone-notifications/toggle",
       );
-      if (!res.ok) throw new Error();
-      const json = await res.json();
       setUserMilestones(json.isEnabled ?? newValue);
       toast({
         title: "Updated",
@@ -223,15 +197,33 @@ const SettingsPage = () => {
       return;
     }
     setAddLoading(true);
-    setTimeout(() => {
+    try {
+      const phoneDigits = adminPhone.replace("+251", "");
+      const data = await apiClient.post<any>("/accounts/create-admin", {
+        name: adminName,
+        phoneNumber: phoneDigits,
+        password: adminPassword,
+        email: adminEmail || undefined,
+      });
+
       toast({
         title: "Admin Created",
-        description: `${adminName} has been added as ${adminRole}.`,
+        description: `${adminName} has been added as an admin successfully.`,
       });
+
+      // Update state locally
+      setAdmins((prev) => [data, ...prev]);
       setAddAdminOpen(false);
       resetAddAdminForm();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create admin.",
+        variant: "destructive",
+      });
+    } finally {
       setAddLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -661,7 +653,14 @@ const SettingsPage = () => {
               Cancel
             </Button>
             <Button onClick={handleAddAdmin} disabled={addLoading}>
-              {addLoading ? "Creating..." : "Create Admin"}
+              {addLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Admin"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

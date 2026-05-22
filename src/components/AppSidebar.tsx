@@ -21,7 +21,7 @@ import {
 const navItems = [
   { title: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
   { title: "Question Bank", path: "/questions", icon: FileQuestion },
-  { title: "Users", path: "/users", icon: Users },
+  { title: "Students", path: "/users", icon: Users },
   { title: "Payments", path: "/payments", icon: CreditCard },
   { title: "Analytics", path: "/analytics", icon: BarChart3 },
   { title: "Settings", path: "/settings", icon: Settings },

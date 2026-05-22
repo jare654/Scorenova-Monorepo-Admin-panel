@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 const ChangePasswordPage = () => {
   const { token } = useAuth();
@@ -68,27 +68,11 @@ const ChangePasswordPage = () => {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/auth/change-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          currentPassword,
-          password,
-          confirmPassword,
-        }),
+      await apiClient.post("/auth/change-password", {
+        currentPassword,
+        password,
+        confirmPassword,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            "Failed to change password. Please check your current password.",
-        );
-      }
 
       toast({
         title: "Success",

@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { API_URL } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 interface UserInfo {
   id: string;
@@ -47,14 +47,7 @@ const AdminProfilePage = () => {
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`${API_URL}/auth/get-user-info`, {
-          headers: {
-            accept: "*/*",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const data = await res.json();
+        const data = await apiClient.get<any>("/auth/get-user-info");
         setUserInfo(data);
       } catch (err) {
         // Failed to fetch user info

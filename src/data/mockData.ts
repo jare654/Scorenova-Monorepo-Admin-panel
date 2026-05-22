@@ -148,13 +148,21 @@ export const userGrowthData = Array.from({ length: 30 }, (_, i) => ({
   premium: 2000 + Math.floor(Math.random() * 400) + i * 12,
 }));
 
-export const revenueData = Array.from({ length: 30 }, (_, i) => ({
-  day: `Mar ${i + 1}`,
-  revenue: 1200 + Math.floor(Math.random() * 800),
-  telebirr: 700 + Math.floor(Math.random() * 400),
-  cbe: 300 + Math.floor(Math.random() * 300),
-  mpesa: 100 + Math.floor(Math.random() * 200),
-}));
+// ── Fixed: 12 monthly entries with `month` key to match PaymentsPage ──────────
+export const revenueData = [
+  { month: "Jan", revenue: 32000, telebirr: 18000, cbe: 9000,  mpesa: 5000 },
+  { month: "Feb", revenue: 28500, telebirr: 16000, cbe: 8500,  mpesa: 4000 },
+  { month: "Mar", revenue: 35000, telebirr: 20000, cbe: 10000, mpesa: 5000 },
+  { month: "Apr", revenue: 31000, telebirr: 17500, cbe: 9000,  mpesa: 4500 },
+  { month: "May", revenue: 38000, telebirr: 22000, cbe: 11000, mpesa: 5000 },
+  { month: "Jun", revenue: 42000, telebirr: 24000, cbe: 12000, mpesa: 6000 },
+  { month: "Jul", revenue: 39000, telebirr: 22500, cbe: 11000, mpesa: 5500 },
+  { month: "Aug", revenue: 45000, telebirr: 26000, cbe: 13000, mpesa: 6000 },
+  { month: "Sep", revenue: 41000, telebirr: 23500, cbe: 12000, mpesa: 5500 },
+  { month: "Oct", revenue: 47000, telebirr: 27000, cbe: 13500, mpesa: 6500 },
+  { month: "Nov", revenue: 44000, telebirr: 25000, cbe: 13000, mpesa: 6000 },
+  { month: "Dec", revenue: 52000, telebirr: 30000, cbe: 15000, mpesa: 7000 },
+];
 
 export const aiCostData = Array.from({ length: 30 }, (_, i) => ({
   day: `Mar ${i + 1}`,
@@ -172,4 +180,3 @@ export const adminUsers: AdminUser[] = [
   { id: "admin-2", name: "Genet Mulugeta", email: "genet@aiexamprep.et", role: "Content Manager", lastLogin: "2025-03-24 14:15" },
   { id: "admin-3", name: "Dawit Tesfaye", email: "dawit@aiexamprep.et", role: "Support", lastLogin: "2025-03-25 08:00" },
 ];
-

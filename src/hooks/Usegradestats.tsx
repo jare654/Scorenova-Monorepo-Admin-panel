@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
-import { API_URL, getGrades } from "@/lib/api";
+import { apiClient } from "@/services/api/client";
 
 export interface GradeStat {
   grade: string;
@@ -13,50 +13,78 @@ interface UseGradeStatsReturn {
   error: string | null;
 }
 
+/**
+ * Fetches question counts grouped by stream (Natural Science / Social Science).
+ *
+ * The curriculum is now stream-based, not grade-based. This hook fetches
+ * streams and the question count per stream via the analytics overview,
+ * falling back to per-stream subject counts if the overview isn't available.
+ */
 export function useGradeStats(): UseGradeStatsReturn {
   const { token } = useAuth();
-  const [questionsByGrade, setQuestionsByGrade] = useState<GradeStat[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!token) return;
+  const {
+    data: questionsByGrade = [],
+    isLoading: loading,
+    error,
+  } = useQuery<GradeStat[], Error>({
+    queryKey: ["stream-stats"],
+    queryFn: async ({ signal }) => {
+      // Fetch streams and questions in parallel
+      const [streamsJson, questionsJson] = await Promise.all([
+        apiClient.get<any>("/streams", signal),
+        apiClient.get<any>("/questions/statistics", signal).catch(() => null),
+      ]);
 
-    const fetchGradeStats = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const grades = await getGrades(token);
+      const streams: { id: string; name: string }[] = Array.isArray(streamsJson)
+        ? streamsJson
+        : (streamsJson?.data ?? []);
 
-        const stats = await Promise.all(
-          grades.map(async (g) => {
-            try {
-              const res = await fetch(`${API_URL}/grades/${g.id}/statistics`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) return { grade: `Grade ${g.name}`, questions: 0 };
-              const json = await res.json();
-              return {
-                grade: `Grade ${json.gradeName}`,
-                questions: json.totalQuestions ?? 0,
-              };
-            } catch {
-              return { grade: `Grade ${g.name}`, questions: 0 };
-            }
-          }),
-        );
+      // If we have aggregate stats, group by stream via subject lookup
+      if (questionsJson?.bySubject) {
+        // Fetch subjects to map subjectId → streamId
+        const subjectsJson = await apiClient.get<any>("/subjects", signal);
+        const subjects: { id: string; streamId: string | null }[] =
+          Array.isArray(subjectsJson)
+            ? subjectsJson
+            : (subjectsJson?.data ?? []);
 
-        setQuestionsByGrade(stats);
-      } catch (err) {
-        // useGradeStats failed
-        setError("Failed to load grade statistics.");
-      } finally {
-        setLoading(false);
+        const subjectToStream = new Map<string, string>();
+        for (const s of subjects) {
+          if (s.streamId) subjectToStream.set(s.id, s.streamId);
+        }
+
+        const streamCounts = new Map<string, number>();
+        for (const row of questionsJson.bySubject) {
+          const streamId = subjectToStream.get(row.subjectId);
+          if (streamId) {
+            streamCounts.set(
+              streamId,
+              (streamCounts.get(streamId) ?? 0) + Number(row.count),
+            );
+          }
+        }
+
+        return streams.map((s) => ({
+          grade: s.name,
+          questions: streamCounts.get(s.id) ?? 0,
+        }));
       }
-    };
 
-    fetchGradeStats();
-  }, [token]);
+      // Fallback: return streams with 0 counts
+      return streams.map((s) => ({ grade: s.name, questions: 0 }));
+    },
+    enabled: !!token,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
-  return { questionsByGrade, loading, error };
+  return {
+    questionsByGrade,
+    loading,
+    error: error ? error.message : null,
+  };
 }

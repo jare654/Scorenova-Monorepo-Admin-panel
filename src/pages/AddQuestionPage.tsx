@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Save, X, Sparkles, Eye, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,9 +22,23 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/components/auth/context/AuthContext";
-import { useLocation } from "react-router-dom";
-import { API_URL, getGrades } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  createQuestion,
+  createSubject,
+  createTopic,
+  explainQuestion,
+  fetchQuestionStatistics,
+  fetchStreams,
+  fetchSubjects,
+  fetchTopics,
+  updateQuestion,
+  type Stream,
+  type Subject,
+  type Topic,
+} from "@/services/api/questions";
+
+// ─── Reusable create dialog ───────────────────────────────────────────────────
 
 const CreateDialog = ({
   open,
@@ -45,18 +59,13 @@ const CreateDialog = ({
   const [description, setDescription] = useState("");
 
   useEffect(() => {
-    if (open) {
-      setName("");
-      setDescription("");
-    }
+    if (open) { setName(""); setDescription(""); }
   }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-3 py-2">
           <div>
             <Label>Name *</Label>
@@ -64,11 +73,7 @@ const CreateDialog = ({
               placeholder={placeholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                name.trim() &&
-                onConfirm(name.trim(), description)
-              }
+              onKeyDown={(e) => e.key === "Enter" && name.trim() && onConfirm(name.trim(), description)}
             />
           </div>
           <div>
@@ -81,13 +86,8 @@ const CreateDialog = ({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => name.trim() && onConfirm(name.trim(), description)}
-            disabled={!name.trim() || loading}
-          >
+          <Button variant="outline" onClick={onCancel} disabled={loading}>Cancel</Button>
+          <Button onClick={() => name.trim() && onConfirm(name.trim(), description)} disabled={!name.trim() || loading}>
             {loading ? "Creating..." : "Create"}
           </Button>
         </DialogFooter>
@@ -95,6 +95,8 @@ const CreateDialog = ({
     </Dialog>
   );
 };
+
+// ─── AI explanation dialog ────────────────────────────────────────────────────
 
 const AIExplanationDialog = ({
   open,
@@ -108,67 +110,56 @@ const AIExplanationDialog = ({
   onClose: () => void;
 }) => {
   if (!result) return null;
-
   const tabs = [
     { value: "stepByStep", label: "Step by Step", content: result.stepByStep },
     { value: "clear", label: "Clear", content: result.clear },
     { value: "simplified", label: "Simplified", content: result.simplified },
   ];
-
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            AI Generated Explanation
+            <Sparkles className="h-4 w-4 text-primary" /> AI Generated Explanation
           </DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="stepByStep" className="w-full">
           <TabsList className="w-full">
-            {tabs.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="flex-1 text-xs"
-              >
-                {tab.label}
-              </TabsTrigger>
+            {tabs.map((t) => (
+              <TabsTrigger key={t.value} value={t.value} className="flex-1 text-xs">{t.label}</TabsTrigger>
             ))}
           </TabsList>
-          {tabs.map((tab) => (
-            <TabsContent key={tab.value} value={tab.value} className="mt-4">
+          {tabs.map((t) => (
+            <TabsContent key={t.value} value={t.value} className="mt-4">
               <div className="bg-muted rounded-lg p-4 text-sm leading-relaxed min-h-[120px] whitespace-pre-line">
-                {tab.content}
+                {t.content}
               </div>
-              <Button
-                className="w-full mt-3"
-                onClick={() => onUse(tab.content)}
-              >
+              <Button className="w-full mt-3" onClick={() => onUse(t.content)}>
                 Use this explanation
               </Button>
             </TabsContent>
           ))}
         </Tabs>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="w-full">
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={onClose} className="w-full">Cancel</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 };
 
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 const AddQuestionPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { token } = useAuth();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const editingQuestion = location.state?.question;
   const isEditMode = !!editingQuestion;
 
-  const [gradeId, setGradeId] = useState("");
+  // ── Form state
+  const [streamId, setStreamId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [topicId, setTopicId] = useState("");
   const [difficulty, setDifficulty] = useState("");
@@ -179,27 +170,23 @@ const AddQuestionPage = () => {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
-  const [grades, setGrades] = useState<{ id: string; name: string }[]>([]);
-  type Subject = { id: string; name: string; gradeId: string };
-  type Topic = { id: string; name: string; subjectId: string };
+  // ── Taxonomy data
+  const [streams, setStreams] = useState<Stream[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
 
-  const [gradeDialog, setGradeDialog] = useState(false);
+  // ── Dialog state
   const [subjectDialog, setSubjectDialog] = useState(false);
   const [topicDialog, setTopicDialog] = useState(false);
   const [dialogLoading, setDialogLoading] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
 
+  // ── AI state
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<{
-    stepByStep: string;
-    clear: string;
-    simplified: string;
-  } | null>(null);
+  const [aiResult, setAiResult] = useState<{ stepByStep: string; clear: string; simplified: string } | null>(null);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
 
-  // ── Stats state
+  // ── Stats
   const [stats, setStats] = useState<{
     totalAttempts: number;
     correctAnswers: number;
@@ -207,357 +194,186 @@ const AddQuestionPage = () => {
     successRate: number;
   } | null>(null);
 
-  // ── Fetch grades on mount
+  // ── Load streams on mount
   useEffect(() => {
-    const fetchGrades = async () => {
-      try {
-        const grades = await getGrades(token);
-        setGrades(grades);
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load grades.",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchGrades();
-  }, [token]);
+    fetchStreams()
+      .then(setStreams)
+      .catch(() => toast({ title: "Error", description: "Failed to load streams.", variant: "destructive" }));
+  }, [toast]);
 
-  // ── Fetch subjects when grade changes
+  // ── Load subjects when stream changes
   useEffect(() => {
-    if (!gradeId) {
+    if (!streamId) {
       setSubjects([]);
-      if (!isEditMode) {
-        setSubjectId("");
-        setTopicId("");
-      }
+      if (!isEditMode) { setSubjectId(""); setTopicId(""); }
       return;
     }
-    const fetchSubjects = async () => {
-      try {
-        const res = await fetch(`${API_URL}/subjects?gradeId=${gradeId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setSubjects(Array.isArray(json) ? json : (json.data ?? []));
-        if (!isEditMode || prefilled) {
-          setSubjectId("");
-          setTopicId("");
-        }
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load subjects.",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchSubjects();
-  }, [gradeId, token]);
+    fetchSubjects(streamId)
+      .then((data) => {
+        setSubjects(data);
+        if (!isEditMode || prefilled) { setSubjectId(""); setTopicId(""); }
+      })
+      .catch(() => toast({ title: "Error", description: "Failed to load subjects.", variant: "destructive" }));
+  }, [streamId, isEditMode, prefilled, toast]);
 
-  // ── Fetch topics when subject changes
+  // ── Load topics when subject changes
   useEffect(() => {
     if (!subjectId) {
       setTopics([]);
       if (!isEditMode || prefilled) setTopicId("");
       return;
     }
-    const fetchTopics = async () => {
-      try {
-        const res = await fetch(`${API_URL}/topics?subjectId=${subjectId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setTopics(Array.isArray(json) ? json : (json.data ?? []));
+    fetchTopics(subjectId)
+      .then((data) => {
+        setTopics(data);
         if (!isEditMode || prefilled) setTopicId("");
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load topics.",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchTopics();
-  }, [subjectId, token]);
+      })
+      .catch(() => toast({ title: "Error", description: "Failed to load topics.", variant: "destructive" }));
+  }, [subjectId, isEditMode, prefilled, toast]);
 
-  // ── Prefill text/options/difficulty/explanation immediately
+  // ── Prefill form when editing
   useEffect(() => {
     if (!isEditMode || !editingQuestion) return;
     setQuestionText(editingQuestion.text ?? "");
-    setOptions(
-      Array.isArray(editingQuestion.options)
-        ? editingQuestion.options
-        : ["", "", "", ""],
-    );
+    setOptions(Array.isArray(editingQuestion.options) ? editingQuestion.options : ["", "", "", ""]);
     setDifficulty(
       editingQuestion.difficulty
-        ? editingQuestion.difficulty.charAt(0).toUpperCase() +
-            editingQuestion.difficulty.slice(1).toLowerCase()
+        ? editingQuestion.difficulty.charAt(0).toUpperCase() + editingQuestion.difficulty.slice(1).toLowerCase()
         : "",
     );
     setExplanation(editingQuestion.explanation ?? "");
     if (Array.isArray(editingQuestion.options)) {
-      const idx = editingQuestion.options.indexOf(
-        editingQuestion.correctAnswer,
-      );
+      const idx = editingQuestion.options.indexOf(editingQuestion.correctAnswer);
       if (idx >= 0) setCorrectAnswer(String(idx));
     }
   }, [isEditMode, editingQuestion]);
 
-  // ── Resolve grade from grades list
+  // ── Resolve stream from streams list (edit mode)
   useEffect(() => {
-    if (!isEditMode || !editingQuestion || !grades.length) return;
-    const gradeMatch = grades.find((g) => g.name === editingQuestion.gradeName);
-    if (gradeMatch) setGradeId(gradeMatch.id);
-  }, [grades, isEditMode, editingQuestion]);
+    if (!isEditMode || !editingQuestion || !streams.length) return;
+    // Try to match by subjectId → find subject → find its streamId
+    if (editingQuestion.subjectId) {
+      fetchSubjects()
+        .then((allSubjects) => {
+          const match = allSubjects.find((s) => s.id === editingQuestion.subjectId);
+          if (match?.streamId) setStreamId(match.streamId);
+        })
+        .catch(() => {});
+    }
+  }, [streams, isEditMode, editingQuestion]);
 
-  // ── Resolve subject from subjects list
+  // ── Resolve subject from subjects list (edit mode)
   useEffect(() => {
     if (!isEditMode || !editingQuestion || !subjects.length) return;
-    const subjectMatch = subjects.find(
-      (s) => s.name === editingQuestion.subjectName,
-    );
-    if (subjectMatch) setSubjectId(subjectMatch.id);
+    const match = subjects.find((s) => s.id === editingQuestion.subjectId || s.name === editingQuestion.subjectName);
+    if (match) setSubjectId(match.id);
   }, [subjects, isEditMode, editingQuestion]);
 
-  // ── Resolve topic from topics list
+  // ── Resolve topic from topics list (edit mode)
   useEffect(() => {
     if (!isEditMode || !editingQuestion || !topics.length) return;
-    const topicMatch = topics.find((t) => t.name === editingQuestion.topicName);
-    if (topicMatch) setTopicId(topicMatch.id);
+    const match = topics.find((t) => t.id === editingQuestion.topicId || t.name === editingQuestion.topicName);
+    if (match) setTopicId(match.id);
   }, [topics, isEditMode, editingQuestion]);
 
-  // ── Fetch question statistics when editing
+  // ── Load stats when editing
   useEffect(() => {
     if (!isEditMode || !editingQuestion?.id) return;
-    const fetchStats = async () => {
-      try {
-        const res = await fetch(
-          `${API_URL}/questions/${editingQuestion.id}/statistics`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        if (!res.ok) return;
-        const payload = await res.json();
-        const result = payload?.data ?? payload;
-        if (result && typeof result === "object") {
-          setStats({
-            totalAttempts: result.totalAttempts ?? 0,
-            correctAnswers: result.correctAnswers ?? 0,
-            averageTimeSeconds: result.averageTimeSeconds ?? 0,
-            successRate: result.successRate ?? 0,
-          });
-        }
-      } catch {
-        // Failed to load question statistics
-      }
-    };
-    fetchStats();
-  }, [isEditMode, editingQuestion?.id, token]);
+    fetchQuestionStatistics(editingQuestion.id)
+      .then((result) => { if (result) setStats(result); })
+      .catch(() => {});
+  }, [isEditMode, editingQuestion?.id]);
 
-  // ── AI Generate
+  // ── AI generate
   const handleAIGenerate = async () => {
     const missing: string[] = [];
     if (!questionText.trim()) missing.push("question text");
-    if (!options[parseInt(correctAnswer)]?.trim())
-      missing.push("correct answer");
+    if (!options[parseInt(correctAnswer)]?.trim()) missing.push("correct answer");
     if (!subjectId) missing.push("subject");
-
     if (missing.length > 0) {
-      toast({
-        title: "Missing information",
-        description: `Please fill in: ${missing.join(", ")} before generating an explanation.`,
-        variant: "destructive",
-      });
+      toast({ title: "Missing info", description: `Fill in: ${missing.join(", ")}`, variant: "destructive" });
       return;
     }
-
     const selectedSubject = subjects.find((s) => s.id === subjectId);
     const selectedTopic = topics.find((t) => t.id === topicId);
-
     setAiLoading(true);
     try {
-      const res = await fetch(`${API_URL}/ai/explain`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          question: questionText,
-          correctAnswer: options[parseInt(correctAnswer)],
-          subject: selectedSubject?.name ?? "",
-          topic: selectedTopic?.name ?? "",
-        }),
+      const result = await explainQuestion({
+        question: questionText,
+        correctAnswer: options[parseInt(correctAnswer)],
+        options,
+        subject: selectedSubject?.name ?? "",
+        topic: selectedTopic?.name ?? "",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const payload = await res.json();
-      const result = payload?.data ?? payload;
-      const normalized = {
-        stepByStep:
-          result?.stepByStep ?? result?.steps ?? result?.explanation ?? "",
-        clear: result?.clear ?? result?.explanation ?? "",
-        simplified: result?.simplified ?? result?.explanation ?? "",
-      };
-      if (!normalized.stepByStep && !normalized.clear && !normalized.simplified) {
-        throw new Error("Invalid AI response");
-      }
-      setAiResult(normalized);
+      if (!result.stepByStep && !result.clear && !result.simplified) throw new Error("Empty AI response");
+      setAiResult({
+        stepByStep: result.stepByStep ?? "",
+        clear: result.clear ?? "",
+        simplified: result.simplified ?? "",
+      });
       setAiDialogOpen(true);
     } catch {
-      toast({
-        title: "AI Error",
-        description: "Failed to generate explanation. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "AI Error", description: "Failed to generate explanation.", variant: "destructive" });
     } finally {
       setAiLoading(false);
     }
   };
 
-  // ── Create handlers
-  const handleCreateGrade = async (name: string, description: string) => {
-    const exists = grades.find(
-      (g) => g.name.toLowerCase() === name.toLowerCase(),
-    );
-    if (exists) {
-      toast({
-        title: "Already exists",
-        description: `Grade "${name}" already exists. Selecting it.`,
-      });
-      setGradeId(exists.id);
-      setGradeDialog(false);
+  // ── Create subject
+  const handleCreateSubject = async (name: string, description: string) => {
+    if (!streamId) {
+      toast({ title: "Select a stream first", variant: "destructive" });
       return;
     }
-    setDialogLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/grades`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, description }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newGrade = await res.json();
-      setGrades((prev) => [...prev, newGrade]);
-      setGradeId(newGrade.id);
-      setGradeDialog(false);
-      toast({
-        title: "Created",
-        description: `Grade "${name}" created and selected.`,
-      });
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to create grade.",
-        variant: "destructive",
-      });
-    } finally {
-      setDialogLoading(false);
-    }
-  };
-
-  const handleCreateSubject = async (name: string, description: string) => {
-    const exists = subjects.find(
-      (s) => s.name.toLowerCase() === name.toLowerCase(),
-    );
+    const exists = subjects.find((s) => s.name.toLowerCase() === name.toLowerCase());
     if (exists) {
-      toast({
-        title: "Already exists",
-        description: `Subject "${name}" already exists. Selecting it.`,
-      });
       setSubjectId(exists.id);
       setSubjectDialog(false);
       return;
     }
     setDialogLoading(true);
     try {
-      const res = await fetch(`${API_URL}/subjects`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, description, gradeId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newSubject = await res.json();
+      const newSubject = await createSubject({ name, description, streamId });
       setSubjects((prev) => [...prev, newSubject]);
       setSubjectId(newSubject.id);
       setSubjectDialog(false);
-      toast({
-        title: "Created",
-        description: `Subject "${name}" created and selected.`,
-      });
+      toast({ title: "Created", description: `Subject "${name}" created.` });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to create subject.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to create subject.", variant: "destructive" });
     } finally {
       setDialogLoading(false);
     }
   };
 
+  // ── Create topic
   const handleCreateTopic = async (name: string, description: string) => {
-    const exists = topics.find(
-      (t) => t.name.toLowerCase() === name.toLowerCase(),
-    );
+    const exists = topics.find((t) => t.name.toLowerCase() === name.toLowerCase());
     if (exists) {
-      toast({
-        title: "Already exists",
-        description: `Topic "${name}" already exists. Selecting it.`,
-      });
       setTopicId(exists.id);
       setTopicDialog(false);
       return;
     }
     setDialogLoading(true);
     try {
-      const res = await fetch(`${API_URL}/topics`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name, description, subjectId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newTopic = await res.json();
+      const newTopic = await createTopic({ name, description, subjectId });
       setTopics((prev) => [...prev, newTopic]);
       setTopicId(newTopic.id);
       setTopicDialog(false);
-      toast({
-        title: "Created",
-        description: `Topic "${name}" created and selected.`,
-      });
+      toast({ title: "Created", description: `Topic "${name}" created.` });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to create topic.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to create topic.", variant: "destructive" });
     } finally {
       setDialogLoading(false);
     }
   };
 
-  // ── Validate & Save
+  // ── Validate & save
   const validate = () => {
     const e: Record<string, boolean> = {};
-    if (!gradeId) e.grade = true;
+    if (!streamId) e.stream = true;
     if (!subjectId) e.subject = true;
     if (!difficulty) e.difficulty = true;
-    if (!questionText.trim() || questionText.trim().length < 10)
-      e.questionText = true;
+    if (!questionText.trim() || questionText.trim().length < 10) e.questionText = true;
     if (options.some((o) => !o.trim())) e.options = true;
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -565,16 +381,12 @@ const AddQuestionPage = () => {
 
   const handleSave = async () => {
     if (!validate()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields correctly.",
-        variant: "destructive",
-      });
+      toast({ title: "Validation Error", description: "Fill in all required fields.", variant: "destructive" });
       return;
     }
     setLoading(true);
     try {
-      const requestBody = {
+      const body = {
         subjectId,
         topicId: topicId || null,
         text: questionText,
@@ -583,43 +395,26 @@ const AddQuestionPage = () => {
         difficulty: difficulty.toLowerCase(),
         explanation,
       };
-
-      const url = isEditMode
-        ? `${API_URL}/questions/${editingQuestion.id}`
-        : `${API_URL}/questions`;
-      const method = isEditMode ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(
-          Array.isArray(errorData.message)
-            ? errorData.message.join(", ")
-            : errorData.message || `HTTP ${res.status}`,
-        );
+      if (isEditMode) {
+        await updateQuestion(editingQuestion.id, body);
+      } else {
+        await createQuestion(body);
       }
-
-      toast({
-        title: "Success",
-        description: isEditMode
-          ? "Question updated successfully!"
-          : "Question saved successfully!",
-      });
-      navigate("/questions");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save question.",
-        variant: "destructive",
-      });
+      queryClient.invalidateQueries({ queryKey: ["questions"] });
+      toast({ title: "Success", description: isEditMode ? "Question updated." : "Question saved." });
+      if (isEditMode) {
+        navigate("/questions");
+      } else {
+        setQuestionText("");
+        setOptions(["", "", "", ""]);
+        setCorrectAnswer("0");
+        setExplanation("");
+        setDifficulty("");
+        setTopicId("");
+        setErrors({});
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to save.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -629,25 +424,14 @@ const AddQuestionPage = () => {
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          {isEditMode ? "Edit Question" : "Add New Question"}
-        </h2>
+        <h2 className="text-lg font-semibold">{isEditMode ? "Edit Question" : "Add New Question"}</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => navigate("/questions")}>
             <X className="h-4 w-4 mr-1" /> Cancel
           </Button>
-          <Button variant="outline">
-            <Eye className="h-4 w-4 mr-1" /> Preview
-          </Button>
+          <Button variant="outline" disabled><Eye className="h-4 w-4 mr-1" /> Preview</Button>
           <Button onClick={handleSave} disabled={loading}>
-            {loading ? (
-              <>Saving...</>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-1" />
-                {isEditMode ? "Update" : "Save"}
-              </>
-            )}
+            {loading ? "Saving..." : <><Save className="h-4 w-4 mr-1" />{isEditMode ? "Update" : "Save"}</>}
           </Button>
         </div>
       </div>
@@ -656,30 +440,17 @@ const AddQuestionPage = () => {
       <div className="bg-card rounded-lg border p-6 space-y-4">
         <h3 className="font-medium">Basic Information</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Grade */}
+          {/* Stream */}
           <div>
-            <Label>Grade *</Label>
-            <Select value={gradeId} onValueChange={setGradeId}>
-              <SelectTrigger
-                className={errors.grade ? "border-destructive" : ""}
-              >
-                <SelectValue placeholder="Select grade" />
+            <Label>Stream *</Label>
+            <Select value={streamId} onValueChange={setStreamId}>
+              <SelectTrigger className={errors.stream ? "border-destructive" : ""}>
+                <SelectValue placeholder="Select stream" />
               </SelectTrigger>
               <SelectContent>
-                {grades.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    Grade {g.name}
-                  </SelectItem>
+                {streams.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                 ))}
-                <div className="border-t mt-1 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setGradeDialog(true)}
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-primary hover:bg-muted rounded-sm"
-                  >
-                    <Plus className="h-3 w-3" /> Create New Grade
-                  </button>
-                </div>
               </SelectContent>
             </Select>
           </div>
@@ -687,21 +458,13 @@ const AddQuestionPage = () => {
           {/* Subject */}
           <div>
             <Label>Subject *</Label>
-            <Select
-              value={subjectId}
-              onValueChange={setSubjectId}
-              disabled={!gradeId}
-            >
-              <SelectTrigger
-                className={errors.subject ? "border-destructive" : ""}
-              >
+            <Select value={subjectId} onValueChange={setSubjectId} disabled={!streamId}>
+              <SelectTrigger className={errors.subject ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select subject" />
               </SelectTrigger>
               <SelectContent>
                 {subjects.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                 ))}
                 <div className="border-t mt-1 pt-1">
                   <button
@@ -714,20 +477,14 @@ const AddQuestionPage = () => {
                 </div>
               </SelectContent>
             </Select>
-            {!gradeId && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Please select a grade first
-              </p>
-            )}
+            {!streamId && <p className="text-xs text-muted-foreground mt-1">Select a stream first</p>}
           </div>
 
           {/* Difficulty */}
           <div>
             <Label>Difficulty *</Label>
             <Select value={difficulty} onValueChange={setDifficulty}>
-              <SelectTrigger
-                className={errors.difficulty ? "border-destructive" : ""}
-              >
+              <SelectTrigger className={errors.difficulty ? "border-destructive" : ""}>
                 <SelectValue placeholder="Difficulty" />
               </SelectTrigger>
               <SelectContent>
@@ -741,20 +498,14 @@ const AddQuestionPage = () => {
 
         {/* Topic */}
         <div>
-          <Label>Topic</Label>
-          <Select
-            value={topicId}
-            onValueChange={setTopicId}
-            disabled={!subjectId}
-          >
+          <Label>Topic (optional)</Label>
+          <Select value={topicId} onValueChange={setTopicId} disabled={!subjectId}>
             <SelectTrigger>
-              <SelectValue placeholder="Select topic (optional)" />
+              <SelectValue placeholder="Select topic" />
             </SelectTrigger>
             <SelectContent>
               {topics.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name}
-                </SelectItem>
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
               ))}
               <div className="border-t mt-1 pt-1">
                 <button
@@ -767,11 +518,7 @@ const AddQuestionPage = () => {
               </div>
             </SelectContent>
           </Select>
-          {!subjectId && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Please select a subject first
-            </p>
-          )}
+          {!subjectId && <p className="text-xs text-muted-foreground mt-1">Select a subject first</p>}
         </div>
       </div>
 
@@ -785,9 +532,7 @@ const AddQuestionPage = () => {
           rows={4}
           className={errors.questionText ? "border-destructive" : ""}
         />
-        <p className="text-xs text-muted-foreground">
-          Minimum 10 characters required
-        </p>
+        <p className="text-xs text-muted-foreground">Minimum 10 characters required</p>
       </div>
 
       {/* Options */}
@@ -797,9 +542,7 @@ const AddQuestionPage = () => {
           {["A", "B", "C", "D"].map((label, i) => (
             <div key={label} className="flex items-center gap-3">
               <RadioGroupItem value={String(i)} id={`opt-${i}`} />
-              <Label htmlFor={`opt-${i}`} className="font-medium w-6">
-                {label}.
-              </Label>
+              <Label htmlFor={`opt-${i}`} className="font-medium w-6">{label}.</Label>
               <Input
                 placeholder={`Option ${label}`}
                 value={options[i]}
@@ -808,33 +551,20 @@ const AddQuestionPage = () => {
                   next[i] = e.target.value;
                   setOptions(next);
                 }}
-                className={
-                  errors.options && !options[i].trim()
-                    ? "border-destructive flex-1"
-                    : "flex-1"
-                }
+                className={errors.options && !options[i].trim() ? "border-destructive flex-1" : "flex-1"}
               />
             </div>
           ))}
         </RadioGroup>
-        <p className="text-xs text-muted-foreground">
-          Select the radio button next to the correct answer.
-        </p>
+        <p className="text-xs text-muted-foreground">Select the radio button next to the correct answer.</p>
       </div>
 
       {/* Explanation */}
       <div className="bg-card rounded-lg border p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-medium">Explanation</h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAIGenerate}
-            disabled={aiLoading}
-          >
-            <Sparkles
-              className={`h-4 w-4 mr-1 ${aiLoading ? "animate-pulse" : ""}`}
-            />
+          <Button variant="outline" size="sm" onClick={handleAIGenerate} disabled={aiLoading}>
+            <Sparkles className={`h-4 w-4 mr-1 ${aiLoading ? "animate-pulse" : ""}`} />
             {aiLoading ? "Generating..." : "AI Generate"}
           </Button>
         </div>
@@ -844,59 +574,38 @@ const AddQuestionPage = () => {
           onChange={(e) => setExplanation(e.target.value)}
           rows={4}
         />
-        {explanation && (
-          <p className="text-xs text-muted-foreground">
-            {explanation.length} characters
-          </p>
-        )}
+        {explanation && <p className="text-xs text-muted-foreground">{explanation.length} characters</p>}
       </div>
 
-      {/* Statistics */}
+      {/* Statistics (hidden for now)
       <div className="bg-card rounded-lg border p-6">
         <h3 className="font-medium mb-4">Statistics</h3>
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
-            <p className="text-2xl font-bold text-card-foreground">
-              {stats ? stats.totalAttempts.toLocaleString() : "0"}
-            </p>
+            <p className="text-2xl font-bold">{stats?.totalAttempts.toLocaleString() ?? "0"}</p>
             <p className="text-xs text-muted-foreground">Attempts</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-card-foreground">
-              {stats ? stats.correctAnswers.toLocaleString() : "0"}
-            </p>
+            <p className="text-2xl font-bold">{stats?.correctAnswers.toLocaleString() ?? "0"}</p>
             <p className="text-xs text-muted-foreground">Correct</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-card-foreground">
-              {stats
-                ? stats.averageTimeSeconds > 0
-                  ? `${stats.averageTimeSeconds}s`
-                  : "—"
-                : "—"}
+            <p className="text-2xl font-bold">
+              {stats && stats.averageTimeSeconds > 0 ? `${stats.averageTimeSeconds}s` : "—"}
             </p>
             <p className="text-xs text-muted-foreground">Avg Time</p>
           </div>
         </div>
         {stats && stats.totalAttempts > 0 && (
           <div className="mt-4 pt-4 border-t text-center">
-            <p className="text-2xl font-bold text-card-foreground">
-              {stats.successRate.toFixed(1)}%
-            </p>
+            <p className="text-2xl font-bold">{stats.successRate.toFixed(1)}%</p>
             <p className="text-xs text-muted-foreground">Success Rate</p>
           </div>
         )}
       </div>
+      */}
 
-      {/* Create Dialogs */}
-      <CreateDialog
-        open={gradeDialog}
-        title="Create New Grade"
-        placeholder="e.g. Grade 10"
-        loading={dialogLoading}
-        onConfirm={handleCreateGrade}
-        onCancel={() => setGradeDialog(false)}
-      />
+      {/* Dialogs */}
       <CreateDialog
         open={subjectDialog}
         title="Create New Subject"
@@ -913,18 +622,13 @@ const AddQuestionPage = () => {
         onConfirm={handleCreateTopic}
         onCancel={() => setTopicDialog(false)}
       />
-
-      {/* AI Explanation Dialog */}
       <AIExplanationDialog
         open={aiDialogOpen}
         result={aiResult}
         onUse={(text) => {
           setExplanation(text);
           setAiDialogOpen(false);
-          toast({
-            title: "Applied",
-            description: "AI explanation inserted into the field.",
-          });
+          toast({ title: "Applied", description: "AI explanation inserted." });
         }}
         onClose={() => setAiDialogOpen(false)}
       />

@@ -1,18 +1,12 @@
-import { useState, useEffect } from "react";
 import {
   Users,
   UserCheck,
-  DollarSign,
-  Brain,
-  Crown,
-  HelpCircle,
+  UserPlus,
+  UserX,
   Loader2,
 } from "lucide-react";
 import KPICard from "@/components/KPICard";
-import ActivityFeed from "@/components/ActivityFeed";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -25,161 +19,155 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { useAuth } from "@/components/auth/context/AuthContext";
 import { useAccounts } from "@/components/auth/context/Accountcontext";
-import { API_URL, getGrades } from "@/lib/api";
+import { useGradeStats } from "@/hooks/Usegradestats";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const COLORS = ["hsl(224,76%,33%)", "hsl(173,58%,39%)", "hsl(24,95%,53%)"];
 
+// All 12 months abbreviated
+const ALL_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 const DashboardPage = () => {
-  const { token } = useAuth();
   const isMobile = useIsMobile();
 
-  // ── From context (accounts fetched once app-wide) ─────────────────────────
   const {
     totalUsers,
-    activeTodayCount,
-    userGrowthData,
     statusData,
+    students,
     loading: accountsLoading,
   } = useAccounts();
 
-  // ── Grade stats — local to dashboard only ─────────────────────────────────
-  const [questionsByGrade, setQuestionsByGrade] = useState<
-    { grade: string; questions: number }[]
-  >([]);
-  const [gradeStatsLoading, setGradeStatsLoading] = useState(false);
+  const { questionsByGrade, loading: gradeStatsLoading } = useGradeStats();
 
-  useEffect(() => {
-    if (!token) return;
+  const today = new Date();
+  const activeStudentsCount    = students.filter((s) => s.isActive).length;
+  const suspendedStudentsCount = students.filter((s) => !s.isActive).length;
+  const trialStudentsCount     = students.filter((s) => s.status === "trial").length;
+  const todayRegisteredCount   = students.filter((s) => {
+    const d = new Date(s.createdAt ?? s.joinedAt);
+    return d.toDateString() === today.toDateString();
+  }).length;
 
-    const fetchGradeStats = async () => {
-      setGradeStatsLoading(true);
-      try {
-        const grades = await getGrades(token);
+  // ── Monthly gender chart — all 12 months of current year, all students ──
+  const monthlyGenderData = (() => {
+    const now = new Date();
+    const year = now.getFullYear();
 
-        const stats = await Promise.all(
-          grades.map(async (g) => {
-            try {
-              const res = await fetch(`${API_URL}/grades/${g.id}/statistics`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!res.ok) return { grade: `Grade ${g.name}`, questions: 0 };
-              const json = await res.json();
-              return {
-                grade: `Grade ${json.gradeName}`,
-                questions: json.totalQuestions ?? 0,
-              };
-            } catch {
-              return { grade: `Grade ${g.name}`, questions: 0 };
-            }
-          }),
-        );
+    // Build all 12 month buckets for the current year
+    const buckets = ALL_MONTHS.map((mon, idx) => ({
+      month:  mon,
+      monthIndex: idx,
+      male:   0,
+      female: 0,
+    }));
 
-        setQuestionsByGrade(stats);
-      } catch {
-        // Failed to load grade statistics
-      } finally {
-        setGradeStatsLoading(false);
+    if (students.length === 0) return buckets;
+
+    // Resolve the best available date for a student
+    const getDate = (s: typeof students[0]): Date | null => {
+      for (const raw of [s.joinedAt, s.createdAt]) {
+        if (!raw) continue;
+        const d = new Date(raw);
+        if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d;
       }
+      return null;
     };
 
-    fetchGradeStats();
-  }, [token]);
+    // Place every student into their month bucket (current year only)
+    students.forEach((s) => {
+      const d = getDate(s);
+      if (!d) return;
+      if (d.getFullYear() !== year) return; // skip students from other years
+      const bucket = buckets[d.getMonth()];
+      if (!bucket) return;
+      const g = (s.gender ?? "").toLowerCase().trim();
+      if (g === "female" || g === "f") bucket.female += 1;
+      else                              bucket.male   += 1; // male, unknown, or any other value
+    });
+
+    return buckets;
+  })();
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <KPICard
-          title="Total Users"
+          title="Total Students"
           value={accountsLoading ? "—" : totalUsers}
-          trend={23}
-          trendLabel="Extra"
           icon={Users}
         />
         <KPICard
-          title="Active Today"
-          value={accountsLoading ? "—" : activeTodayCount}
-          trend={12}
+          title="Active Students"
+          value={accountsLoading ? "—" : activeStudentsCount}
           icon={UserCheck}
           iconColor="text-success"
         />
         <KPICard
-          title="Total Revenue"
-          value="45,678 ETB"
-          trend={34}
-          icon={DollarSign}
-          iconColor="text-secondary"
+          title="Today Registered"
+          value={accountsLoading ? "—" : todayRegisteredCount}
+          icon={UserPlus}
+          iconColor="text-primary"
         />
         <KPICard
-          title="AI Cost"
-          value="345 ETB"
-          trend={5}
-          icon={Brain}
-          iconColor="text-accent"
+          title="Suspended Students"
+          value={accountsLoading ? "—" : suspendedStudentsCount}
+          icon={UserX}
+          iconColor="text-destructive"
         />
         <KPICard
-          title="Premium Users"
-          value="2,345 (18%)"
-          icon={Crown}
-          iconColor="text-warning"
-        />
-        <KPICard
-          title="Questions Answered"
-          value="234,567"
-          icon={HelpCircle}
-          iconColor="text-primary-light"
+          title="Trial Students"
+          value={accountsLoading ? "—" : trialStudentsCount}
+          icon={Users}
         />
       </div>
 
-      {/* ── User Growth + Pie ──────────────────────────────────────────────── */}
+      {/* ── Student Growth + Pie ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
         <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6 lg:col-span-2">
           <h3 className="mb-4 font-semibold text-card-foreground">
-            User Growth (Last 30 Days)
+            Student Growth by Gender (Monthly)
           </h3>
-          {accountsLoading || userGrowthData.length === 0 ? (
+          {accountsLoading ? (
             <div className="flex h-[240px] items-center justify-center sm:h-[300px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
-              <LineChart data={userGrowthData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(214,32%,91%)"
+              <BarChart
+                data={monthlyGenderData}
+                margin={{ bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: isMobile ? 9 : 11 }}
+                  interval={0}
+                  angle={-30}
+                  textAnchor="end"
+                  height={55}
                 />
-                <XAxis dataKey="day" tick={{ fontSize: isMobile ? 10 : 12 }} interval={isMobile ? 6 : 4} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip
+                  formatter={(value, name) => [value, name]}
+                  labelFormatter={(label) => {
+                    const entry = monthlyGenderData.find((d) => d.month === label);
+                    const total = entry ? entry.male + entry.female : 0;
+                    return `${label}  (Total: ${total})`;
+                  }}
+                />
                 {!isMobile && <Legend />}
-                <Line
-                  type="monotone"
-                  dataKey="users"
-                  stroke="hsl(224,76%,33%)"
-                  strokeWidth={2}
-                  dot={false}
-                  name="Total Users"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="premium"
-                  stroke="hsl(173,58%,39%)"
-                  strokeWidth={2}
-                  dot={false}
-                  name="Premium"
-                />
-              </LineChart>
+                <Bar dataKey="male"   fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} name="Male" />
+                <Bar dataKey="female" fill="hsl(173,58%,39%)" radius={[4, 4, 0, 0]} name="Female" />
+              </BarChart>
             </ResponsiveContainer>
           )}
         </div>
 
         <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
-          <h3 className="mb-4 font-semibold text-card-foreground">
-            Premium vs Free
-          </h3>
+          <h3 className="mb-4 font-semibold text-card-foreground">Premium vs Free</h3>
           {accountsLoading || statusData.length === 0 ? (
             <div className="flex h-[240px] items-center justify-center sm:h-[300px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -194,9 +182,7 @@ const DashboardPage = () => {
                   innerRadius={60}
                   outerRadius={100}
                   dataKey="value"
-                  label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
-                  }
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 >
                   {statusData.map((_, i) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -209,12 +195,10 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* ── Grade Stats + Activity ─────────────────────────────────────────── */}
+      {/* ── Questions by Stream ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
         <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
-          <h3 className="mb-4 font-semibold text-card-foreground">
-            Questions by Grade
-          </h3>
+          <h3 className="mb-4 font-semibold text-card-foreground">Questions by Stream</h3>
           {gradeStatsLoading ? (
             <div className="flex h-[220px] items-center justify-center sm:h-[250px]">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -222,25 +206,17 @@ const DashboardPage = () => {
           ) : (
             <ResponsiveContainer width="100%" height={isMobile ? 220 : 250}>
               <BarChart data={questionsByGrade}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(214,32%,91%)"
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
                 <XAxis dataKey="grade" tick={{ fontSize: isMobile ? 10 : 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Bar
-                  dataKey="questions"
-                  fill="hsl(224,76%,33%)"
-                  radius={[4, 4, 0, 0]}
-                />
+                <Bar dataKey="questions" fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
-
-        <ActivityFeed items={[]} />
       </div>
+
     </div>
   );
 };
