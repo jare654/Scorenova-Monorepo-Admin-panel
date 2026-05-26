@@ -157,6 +157,7 @@ const AddQuestionPage = () => {
   const queryClient = useQueryClient();
   const editingQuestion = location.state?.question;
   const isEditMode = !!editingQuestion;
+  const preselectedSubjectId: string | undefined = location.state?.preselectedSubjectId;
 
   // ── Form state
   const [streamId, setStreamId] = useState("");
@@ -211,10 +212,11 @@ const AddQuestionPage = () => {
     fetchSubjects(streamId)
       .then((data) => {
         setSubjects(data);
-        if (!isEditMode || prefilled) { setSubjectId(""); setTopicId(""); }
+        // Don't clear subjectId if we have a preselected one — the preselect effect will set it
+        if (!isEditMode && !preselectedSubjectId) { setSubjectId(""); setTopicId(""); }
       })
       .catch(() => toast({ title: "Error", description: "Failed to load subjects.", variant: "destructive" }));
-  }, [streamId, isEditMode, prefilled, toast]);
+  }, [streamId, isEditMode, prefilled, preselectedSubjectId, toast]);
 
   // ── Load topics when subject changes
   useEffect(() => {
@@ -261,6 +263,27 @@ const AddQuestionPage = () => {
         .catch(() => {});
     }
   }, [streams, isEditMode, editingQuestion]);
+
+  // ── Auto-select subject when navigated from Mock Exams / Practice page
+  useEffect(() => {
+    if (!preselectedSubjectId || isEditMode || !streams.length) return;
+    fetchSubjects()
+      .then((allSubjects) => {
+        const match = allSubjects.find((s) => s.id === preselectedSubjectId);
+        if (match?.streamId) {
+          setStreamId(match.streamId);
+          // After stream is set, subjects will load — then we set subjectId below
+        }
+      })
+      .catch(() => {});
+  }, [preselectedSubjectId, isEditMode, streams.length]);
+
+  // ── Once subjects load, apply preselected subject
+  useEffect(() => {
+    if (!preselectedSubjectId || isEditMode || !subjects.length) return;
+    const match = subjects.find((s) => s.id === preselectedSubjectId);
+    if (match) setSubjectId(match.id);
+  }, [preselectedSubjectId, isEditMode, subjects]);
 
   // ── Resolve subject from subjects list (edit mode)
   useEffect(() => {

@@ -35,6 +35,7 @@ import {
 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth/context/AuthContext";
+import { useAccounts } from "@/components/auth/context/Accountcontext";
 import { apiClient } from "@/services/api/client";
 import { useQuery } from "@tanstack/react-query";
 
@@ -62,6 +63,7 @@ const unwrap = <T,>(payload: unknown): T => {
 const AnalyticsPage = () => {
   const { toast } = useToast();
   const { token } = useAuth();
+  const { totalUsers: totalStudents, loading: studentsLoading } = useAccounts();
 
   // ── Overview ────────────────────────────────────────────────────────────────
 
@@ -289,8 +291,8 @@ const AnalyticsPage = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="Total Users"
-          value={overview?.users?.total ?? "—"}
+          title="Total Students"
+          value={studentsLoading ? "—" : totalStudents}
           icon={Users}
         />
         <KPICard

@@ -11,6 +11,8 @@ import UsersPage from "@/pages/UsersPage";
 import PaymentsPage from "@/pages/PaymentsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import SettingsPage from "@/pages/SettingsPage";
+import MockExamsPage from "@/pages/MockExamsPage";
+import PracticePage from "@/pages/PracticePage";
 import NotFound from "@/pages/NotFound";
 import { NotificationProvider } from "./components/ui/NotificationContext";
 import AdminProfilePage from "./pages/AdminProfilePage";
@@ -58,20 +60,17 @@ const App = () => (
                 <Route
                   element={
                     <ProtectedRoute>
-                      <DashboardLayout />
+                      <AccountsProvider>
+                        <DashboardLayout />
+                      </AccountsProvider>
                     </ProtectedRoute>
                   }
                 >
-                  <Route
-                    path="/dashboard"
-                    element={
-                      <AccountsProvider>
-                        <DashboardPage />
-                      </AccountsProvider>
-                    }
-                  />
+                  <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/questions" element={<QuestionsPage />} />
                   <Route path="/questions/new" element={<AddQuestionPage />} />
+                  <Route path="/mock-exams" element={<MockExamsPage />} />
+                  <Route path="/practice" element={<PracticePage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/payments" element={<PaymentsPage />} />
 
