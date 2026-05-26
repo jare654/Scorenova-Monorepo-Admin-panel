@@ -103,8 +103,8 @@ export async function pollMockExamUntilDone(
   examId: string,
   onProgress?: (exam: MockExamSummary) => void,
 ): Promise<MockExamDetail> {
-  const POLL_INTERVAL = 8000; // 8 seconds — avoids hammering the server
-  const MAX_POLLS = 40;       // ~5 minutes max
+  const POLL_INTERVAL = 12_000; // 12 seconds — conservative to avoid 429
+  const MAX_POLLS = 30;         // ~6 minutes max
 
   for (let i = 0; i < MAX_POLLS; i++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL));

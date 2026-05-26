@@ -221,10 +221,10 @@ const MockExamsPage = () => {
     ),
     enabled: initialized && !!token,
     staleTime: 30_000,
-    // Poll every 10s only while an exam is still generating — stops automatically when done
+    // Poll every 15s only while an exam is still generating — stops automatically when done
     refetchInterval: (query) => {
       const exams = query.state.data ?? [];
-      return exams.some((e) => e.status === "pending") ? 10_000 : false;
+      return exams.some((e) => e.status === "pending") ? 15_000 : false;
     },
     refetchIntervalInBackground: false, // only poll when tab is active
   });
