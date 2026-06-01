@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { DollarSign, Crown, Search, Loader2 } from "lucide-react";
-import KPICard from "@/components/KPICard";
-import { Badge } from "@/components/ui/badge";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Crown, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,39 +32,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/services/api/client";
 import { useToast } from "@/hooks/use-toast";
-import { revenueData } from "@/data/mockData";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PIE_COLORS = [
-  "hsl(224,76%,33%)",
-  "hsl(173,58%,39%)",
-  "hsl(24,95%,53%)",
-  "hsl(38,92%,50%)",
-];
-
-const paymentBreakdown = [
-  { name: "Telebirr", value: 28456 },
-  { name: "CBE Birr", value: 12345 },
-  { name: "M-Pesa",   value: 4877  },
-];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,32 +56,32 @@ type PremiumSettings = {
   benefitsDescription?: string;
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 const formatDate = (d: string | null) => {
   if (!d) return "—";
   return new Date(d).toLocaleDateString();
 };
 
-// ─── Premium Subscriptions Tab ────────────────────────────────────────────────
+// ─── Premium Users Tab ────────────────────────────────────────────────────────
 
-const PremiumSubscriptionsTab = () => {
+const PremiumUsersTab = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [search, setSearch]           = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Revoke dialog
   const [revokeTarget, setRevokeTarget] = useState<PremiumUser | null>(null);
+
+  // Extend dialog
   const [extendTarget, setExtendTarget] = useState<PremiumUser | null>(null);
-  const [extendDate, setExtendDate]     = useState("");
+  const [extendDate, setExtendDate] = useState("");
 
   const { data: users = [], isLoading } = useQuery<PremiumUser[]>({
     queryKey: ["premium-users"],
-    queryFn: async ({ signal }) => {
-      const payload = await apiClient.get<any>("/accounts/premium-users", signal);
-      // Normalize: API may return array directly or wrapped in { data: [...] }
-      if (Array.isArray(payload)) return payload as PremiumUser[];
-      if (Array.isArray(payload?.data)) return payload.data as PremiumUser[];
-      return [];
-    },
+    queryFn: ({ signal }) => apiClient.get<PremiumUser[]>("/accounts/premium-users", signal),
   });
 
   const revokeMutation = useMutation({
@@ -144,10 +113,8 @@ const PremiumSubscriptionsTab = () => {
       !search ||
       u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.phoneNumber.includes(search);
-    // Compute status from actual dates
-    const isActive = u.premiumEndDate ? new Date(u.premiumEndDate) > new Date() : true;
-    const computedStatus = isActive ? "active" : "expired";
-    const matchStatus = statusFilter === "all" || computedStatus === statusFilter;
+    const matchStatus =
+      statusFilter === "all" || u.status.toLowerCase() === statusFilter;
     return matchSearch && matchStatus;
   });
 
@@ -177,13 +144,15 @@ const PremiumSubscriptionsTab = () => {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border bg-card shadow-sm overflow-x-auto">
-        <table className="min-w-[720px] w-full text-sm">
+      <div className="bg-card rounded-lg border shadow-sm overflow-x-auto">
+        <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
               {["Student Name", "Phone", "Plan", "Start Date", "End Date", "Status", "Actions"].map(
                 (h) => (
-                  <th key={h} className="p-3 text-left font-medium text-muted-foreground">{h}</th>
+                  <th key={h} className="p-3 text-left font-medium text-muted-foreground">
+                    {h}
+                  </th>
                 ),
               )}
             </tr>
@@ -198,17 +167,11 @@ const PremiumSubscriptionsTab = () => {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                  No premium subscribers found.
+                  No premium users found.
                 </td>
               </tr>
             ) : (
-              filtered.map((u) => {
-                // Compute status from actual dates — don't trust the backend status field
-                const isActive = u.premiumEndDate
-                  ? new Date(u.premiumEndDate) > new Date()
-                  : true; // no end date = active
-                const displayStatus = isActive ? "Active" : "Expired";
-                return (
+              filtered.map((u) => (
                 <tr key={u.id} className="border-b hover:bg-muted/30 transition-colors">
                   <td className="p-3 font-medium">{u.name}</td>
                   <td className="p-3 text-muted-foreground">{u.phoneNumber}</td>
@@ -219,12 +182,12 @@ const PremiumSubscriptionsTab = () => {
                     <Badge
                       variant="outline"
                       className={
-                        isActive
+                        u.status === "Active"
                           ? "bg-success/10 text-success border-success/20"
                           : "bg-destructive/10 text-destructive border-destructive/20"
                       }
                     >
-                      {displayStatus}
+                      {u.status}
                     </Badge>
                   </td>
                   <td className="p-3">
@@ -251,14 +214,13 @@ const PremiumSubscriptionsTab = () => {
                     </div>
                   </td>
                 </tr>
-                );
-              })
+              ))
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Revoke Confirm */}
+      {/* Revoke Confirm Dialog */}
       <AlertDialog open={!!revokeTarget} onOpenChange={(v) => !v && setRevokeTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -303,11 +265,14 @@ const PremiumSubscriptionsTab = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setExtendTarget(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setExtendTarget(null)}>
+              Cancel
+            </Button>
             <Button
               disabled={!extendDate || extendMutation.isPending}
               onClick={() =>
-                extendTarget && extendMutation.mutate({ id: extendTarget.id, endDate: extendDate })
+                extendTarget &&
+                extendMutation.mutate({ id: extendTarget.id, endDate: extendDate })
               }
             >
               {extendMutation.isPending ? "Saving..." : "Save"}
@@ -319,17 +284,17 @@ const PremiumSubscriptionsTab = () => {
   );
 };
 
-// ─── Premium Settings Tab ─────────────────────────────────────────────────────
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
 
-const PremiumSettingsTab = () => {
+const SettingsTab = () => {
   const { toast } = useToast();
 
-  const [premiumPrice, setPremiumPrice]               = useState<number | "">("");
-  const [durationDays, setDurationDays]               = useState<number | "">("");
-  const [currency, setCurrency]                       = useState("ETB");
-  const [telegramSupport, setTelegramSupport]         = useState("");
+  const [premiumPrice, setPremiumPrice] = useState<number | "">("");
+  const [durationDays, setDurationDays] = useState<number | "">("");
+  const [currency, setCurrency] = useState("ETB");
+  const [telegramSupport, setTelegramSupport] = useState("");
   const [benefitsDescription, setBenefitsDescription] = useState("");
-  const [loaded, setLoaded]                           = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const { isLoading } = useQuery<{ data: PremiumSettings }>({
     queryKey: ["settings-premium"],
@@ -373,7 +338,7 @@ const PremiumSettingsTab = () => {
   }
 
   return (
-    <div className="max-w-lg space-y-5 pt-2">
+    <div className="max-w-lg space-y-5">
       <div className="space-y-1">
         <Label htmlFor="premiumPrice">Premium Price (ETB)</Label>
         <Input
@@ -385,6 +350,7 @@ const PremiumSettingsTab = () => {
           onChange={(e) => setPremiumPrice(e.target.value === "" ? "" : Number(e.target.value))}
         />
       </div>
+
       <div className="space-y-1">
         <Label htmlFor="durationDays">Subscription Duration (days)</Label>
         <Input
@@ -396,6 +362,7 @@ const PremiumSettingsTab = () => {
           onChange={(e) => setDurationDays(e.target.value === "" ? "" : Number(e.target.value))}
         />
       </div>
+
       <div className="space-y-1">
         <Label htmlFor="currency">Currency</Label>
         <Input
@@ -405,6 +372,7 @@ const PremiumSettingsTab = () => {
           onChange={(e) => setCurrency(e.target.value)}
         />
       </div>
+
       <div className="space-y-1">
         <Label htmlFor="telegramSupport">Telegram Support Link</Label>
         <Input
@@ -414,6 +382,7 @@ const PremiumSettingsTab = () => {
           onChange={(e) => setTelegramSupport(e.target.value)}
         />
       </div>
+
       <div className="space-y-1">
         <Label htmlFor="benefitsDescription">Premium Benefits Description</Label>
         <Textarea
@@ -424,6 +393,7 @@ const PremiumSettingsTab = () => {
           onChange={(e) => setBenefitsDescription(e.target.value)}
         />
       </div>
+
       <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
         {saveMutation.isPending ? "Saving..." : "Save Settings"}
       </Button>
@@ -433,79 +403,33 @@ const PremiumSettingsTab = () => {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const PaymentsPage = () => {
-  const isMobile = useIsMobile();
-
+const PremiumPage = () => {
   return (
-    <div className="space-y-4 sm:space-y-6">
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <KPICard title="Total Revenue"   value="245,890 ETB" trend={18} icon={DollarSign} />
-        <KPICard title="Today Revenue"   value="1,845 ETB"   trend={6}  icon={DollarSign} />
-        <KPICard title="Monthly Revenue" value="45,678 ETB"  trend={21} icon={DollarSign} />
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
-        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6 lg:col-span-2">
-          <h3 className="mb-4 font-semibold text-card-foreground">Revenue (Last 12 Months)</h3>
-          <ResponsiveContainer width="100%" height={isMobile ? 220 : 300}>
-            <BarChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
-              <XAxis
-                dataKey="month"
-                tick={{ fontSize: isMobile ? 10 : 12 }}
-                interval={0}
-                tickFormatter={(value: string) => value.slice(0, 3)}
-              />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="revenue" fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} name="Revenue" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
-          <h3 className="mb-4 font-semibold text-card-foreground">Payment Methods</h3>
-          <ResponsiveContainer width="100%" height={isMobile ? 220 : 260}>
-            <PieChart>
-              <Pie
-                data={paymentBreakdown}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={85}
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {paymentBreakdown.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip formatter={(v) => `${Number(v).toLocaleString()} ETB`} />
-            </PieChart>
-          </ResponsiveContainer>
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Crown className="h-6 w-6 text-warning" />
+        <div>
+          <h1 className="text-2xl font-bold">Premium</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage premium subscriptions and settings
+          </p>
         </div>
       </div>
 
-      {/* Tabs: Premium Subscriptions only */}
-      <Tabs defaultValue="premium">
+      <Tabs defaultValue="users">
         <TabsList>
-          <TabsTrigger value="premium">
-            <Crown className="h-3.5 w-3.5 mr-1.5" />
-            Premium Subscriptions
-          </TabsTrigger>
+          <TabsTrigger value="users">Premium Users</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-
-        {/* ── Premium Subscriptions ── */}
-        <TabsContent value="premium" className="mt-4">
-          <PremiumSubscriptionsTab />
+        <TabsContent value="users" className="mt-4">
+          <PremiumUsersTab />
+        </TabsContent>
+        <TabsContent value="settings" className="mt-4">
+          <SettingsTab />
         </TabsContent>
       </Tabs>
     </div>
   );
 };
 
-export default PaymentsPage;
+export default PremiumPage;

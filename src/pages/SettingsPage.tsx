@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,129 @@ import {
 import { Plus, AlertTriangle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api/client";
+import { useQuery, useMutation } from "@tanstack/react-query";
+
+// ─── Premium Settings Section ─────────────────────────────────────────────────
+
+type PremiumSettings = {
+  premiumPrice?: number;
+  durationDays?: number;
+  currency?: string;
+  telegramSupport?: string;
+  benefitsDescription?: string;
+};
+
+const PremiumSettingsSection = () => {
+  const { toast } = useToast();
+  const [premiumPrice, setPremiumPrice]               = useState<number | "">("");
+  const [durationDays, setDurationDays]               = useState<number | "">("");
+  const [currency, setCurrency]                       = useState("ETB");
+  const [telegramSupport, setTelegramSupport]         = useState("");
+  const [benefitsDescription, setBenefitsDescription] = useState("");
+  const [loaded, setLoaded]                           = useState(false);
+
+  const { isLoading } = useQuery<{ data: PremiumSettings }>({
+    queryKey: ["settings-premium"],
+    queryFn: ({ signal }) =>
+      apiClient.get<{ data: PremiumSettings }>("/settings/premium", signal),
+    onSuccess: (res: { data: PremiumSettings }) => {
+      if (!loaded && res?.data) {
+        const d = res.data;
+        setPremiumPrice(d.premiumPrice ?? "");
+        setDurationDays(d.durationDays ?? "");
+        setCurrency(d.currency ?? "ETB");
+        setTelegramSupport(d.telegramSupport ?? "");
+        setBenefitsDescription(d.benefitsDescription ?? "");
+        setLoaded(true);
+      }
+    },
+  } as any);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      apiClient.put("/settings/premium", {
+        data: {
+          premiumPrice: premiumPrice === "" ? null : Number(premiumPrice),
+          durationDays: durationDays === "" ? null : Number(durationDays),
+          currency,
+          telegramSupport,
+          benefitsDescription,
+        },
+      }),
+    onSuccess: () => toast({ title: "Success", description: "Premium settings saved." }),
+    onError: () =>
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card rounded-lg border p-6 space-y-4">
+      <h3 className="font-semibold">Premium Subscription Settings</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <Label htmlFor="sp-price">Premium Price (ETB)</Label>
+          <Input
+            id="sp-price"
+            type="number"
+            min={0}
+            placeholder="e.g. 199"
+            value={premiumPrice}
+            onChange={(e) => setPremiumPrice(e.target.value === "" ? "" : Number(e.target.value))}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="sp-duration">Subscription Duration (days)</Label>
+          <Input
+            id="sp-duration"
+            type="number"
+            min={1}
+            placeholder="e.g. 30"
+            value={durationDays}
+            onChange={(e) => setDurationDays(e.target.value === "" ? "" : Number(e.target.value))}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="sp-currency">Currency</Label>
+          <Input
+            id="sp-currency"
+            placeholder="ETB"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="sp-telegram">Telegram Support Link</Label>
+          <Input
+            id="sp-telegram"
+            placeholder="@LearnovaSupport"
+            value={telegramSupport}
+            onChange={(e) => setTelegramSupport(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="sp-benefits">Premium Benefits Description</Label>
+        <Textarea
+          id="sp-benefits"
+          placeholder="Describe the benefits of premium..."
+          rows={3}
+          value={benefitsDescription}
+          onChange={(e) => setBenefitsDescription(e.target.value)}
+        />
+      </div>
+      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+        {saveMutation.isPending ? "Saving..." : "Save Premium Settings"}
+      </Button>
+    </div>
+  );
+};
 
 const SettingsPage = () => {
   const { toast } = useToast();
@@ -85,7 +209,7 @@ const SettingsPage = () => {
         setShortAnswer(json.shortAnswerQuestions ?? false);
         setContentModeration(json.contentModeration ?? false);
       } catch {
-        // Failed to fetch feature toggles
+        // Endpoint may not exist on this deployment — silently ignore
       }
     };
     fetchToggles();
@@ -98,7 +222,7 @@ const SettingsPage = () => {
         const json = await apiClient.get<any>("/notifications/admin/milestone-notifications/status");
         setUserMilestones(json.isEnabled ?? false);
       } catch {
-        // Failed to fetch milestone notification status
+        // Endpoint may not exist on this deployment — silently ignore
       }
     };
     fetchMilestoneStatus();
@@ -398,6 +522,7 @@ const SettingsPage = () => {
             </div>
             <Button onClick={handleSave}>Save Changes</Button>
           </div>
+          <PremiumSettingsSection />
         </TabsContent>
 
         {/* Notifications */}

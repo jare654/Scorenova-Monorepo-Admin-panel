@@ -183,3 +183,49 @@ export async function submitMockExam(
   );
   return normalize<SubmitResult>(payload);
 }
+
+// ─── Admin Results API ────────────────────────────────────────────────────────
+
+export interface MockResult {
+  id: string;
+  sessionId: string;
+  examId: string;
+  examLabel: string;
+  studentName: string;
+  studentPhone: string;
+  subjectId: string;
+  subjectName: string;
+  totalQ: number;
+  correct: number;
+  scorePercent: number;
+  passed: boolean;
+  takenAt: string;
+}
+
+export interface MockResultsResponse {
+  data: MockResult[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export async function fetchMockResults(
+  params: { page?: number; limit?: number; subjectId?: string } = {},
+  signal?: AbortSignal,
+): Promise<MockResultsResponse> {
+  const p = new URLSearchParams();
+  if (params.page)      p.set("page",      String(params.page));
+  if (params.limit)     p.set("limit",     String(params.limit));
+  if (params.subjectId) p.set("subjectId", params.subjectId);
+  const q = p.toString();
+  const payload = await apiClient.get<unknown>(
+    `/mocks/admin/results${q ? `?${q}` : ""}`,
+    signal,
+  );
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return payload as MockResultsResponse;
+  }
+  const data = normalizeArray<MockResult>(payload);
+  return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
+}

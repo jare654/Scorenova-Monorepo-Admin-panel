@@ -36,6 +36,7 @@ type AccountUser = {
   phoneNumber: string;
   type: string;
   isActive: boolean;
+  isPremium: boolean;
   gender: string;
   status: string;
   address: string | null;
@@ -43,6 +44,9 @@ type AccountUser = {
   updatedAt: string;
   lastActiveAt: string;
   gradeId?: string;
+  premiumStartDate?: string | null;
+  premiumEndDate?: string | null;
+  premiumPlan?: string | null;
 };
 
 type UserProgress = {
@@ -70,6 +74,7 @@ const UsersPage = () => {
   const [search, setSearch]             = useState("");
   const [streamFilter, setStreamFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [activityFilter, setActivityFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<AccountUser | null>(null);
   const [page, setPage]                 = useState(1);
   const perPage = 10;
@@ -95,6 +100,28 @@ const UsersPage = () => {
   // Delete state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteLoading, setDeleteLoading]       = useState(false);
+
+  // Grant Premium state — dates auto-calculated from plan, no manual date pickers
+  const [grantPremiumDialogOpen, setGrantPremiumDialogOpen] = useState(false);
+  const [grantConfirmText, setGrantConfirmText]             = useState("");
+  const [grantPlan, setGrantPlan]                           = useState("Monthly");
+
+  // Plan → duration in days
+  const PLAN_DAYS: Record<string, number> = {
+    Monthly:   30,
+    Quarterly: 90,
+    Annual:    365,
+  };
+
+  const getGrantDates = (plan: string) => {
+    const start = new Date();
+    const end   = new Date(start);
+    end.setDate(end.getDate() + (PLAN_DAYS[plan] ?? 30));
+    return {
+      startDate: start.toISOString().slice(0, 10),
+      endDate:   end.toISOString().slice(0, 10),
+    };
+  };
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +174,34 @@ const UsersPage = () => {
     },
     onError:    () => toast({ title: "Error", description: "Failed to toggle premium status.", variant: "destructive" }),
     onSettled:  () => setActionLoading(null),
+  });
+
+  const grantPremiumMutation = useMutation({
+    mutationFn: ({ id, startDate, endDate, plan }: {
+      id: string; startDate: string; endDate: string; plan: string;
+    }) => apiClient.post(`/accounts/${id}/grant-premium`, { startDate, endDate, plan }),
+    onMutate:  () => setActionLoading("premium"),
+    onSuccess: (_, vars) => {
+      // Clear the GET cache so the refetch returns fresh data (not the 30s cached version)
+      apiClient.clearCache("/accounts/get-accounts");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      if (selectedUser?.id === vars.id) {
+        setSelectedUser({
+          ...selectedUser,
+          status: "premium",
+          isPremium: true,
+          premiumStartDate: vars.startDate,
+          premiumEndDate: vars.endDate,
+          premiumPlan: vars.plan,
+        });
+      }
+      toast({ title: "Success", description: "Premium access granted successfully." });
+      setGrantPremiumDialogOpen(false);
+      setGrantConfirmText("");
+      setGrantPlan("Monthly");
+    },
+    onError:   () => toast({ title: "Error", description: "Failed to grant premium.", variant: "destructive" }),
+    onSettled: () => setActionLoading(null),
   });
 
   const toggleSuspendMutation = useMutation({
@@ -289,8 +344,13 @@ const UsersPage = () => {
       !u.phoneNumber.includes(search)
     )
       return false;
-    if (statusFilter !== "all" && u.status !== statusFilter) return false;
+    // statusFilter: "premium" checks isPremium boolean; "free"/"trial" check the status string
+    if (statusFilter === "premium" && !u.isPremium) return false;
+    if (statusFilter === "free" && (u.isPremium || u.status === "trial")) return false;
+    if (statusFilter === "trial" && u.status !== "trial") return false;
     if (streamFilter !== "all" && u.gradeId !== streamFilter) return false;
+    if (activityFilter === "active" && !u.isActive) return false;
+    if (activityFilter === "suspended" && u.isActive) return false;
     return true;
   });
 
@@ -348,6 +408,17 @@ const UsersPage = () => {
               <SelectItem value="trial">Trial</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={activityFilter} onValueChange={(v) => { setActivityFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="Activity" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Activity</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Table */}
@@ -402,14 +473,14 @@ const UsersPage = () => {
                       <Badge
                         variant="outline"
                         className={
-                          u.status === "premium"
+                          u.isPremium
                             ? "bg-warning/10 text-warning border-warning/20"
                             : u.status === "trial"
                               ? "bg-accent/10 text-accent border-accent/20"
                               : "bg-muted text-muted-foreground"
                         }
                       >
-                        {u.status?.toUpperCase() || "FREE"}
+                        {u.isPremium ? "PREMIUM" : u.status?.toUpperCase() || "FREE"}
                       </Badge>
                     </td>
                     <td className="p-3 text-muted-foreground">
@@ -495,16 +566,47 @@ const UsersPage = () => {
                   variant="outline"
                   className={cn(
                     "mt-1",
-                    selectedUser.status === "premium"
+                    selectedUser.isPremium
                       ? "bg-warning/10 text-warning border-warning/20"
                       : selectedUser.status === "trial"
                         ? "bg-accent/10 text-accent border-accent/20"
                         : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {selectedUser.status?.toUpperCase() || "FREE"}
+                  {selectedUser.isPremium ? "PREMIUM" : selectedUser.status?.toUpperCase() || "FREE"}
                 </Badge>
               </div>
+            </div>
+
+            {/* Premium Status */}
+            <div className="bg-muted rounded-lg p-3 space-y-1">
+              <p className="text-muted-foreground text-xs font-medium">Premium Status</p>
+              {selectedUser.status === "premium" && selectedUser.premiumEndDate && new Date(selectedUser.premiumEndDate) > new Date() ? (
+                <div className="flex flex-col gap-1">
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 w-fit">
+                    Premium Active
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">
+                    Expires: {new Date(selectedUser.premiumEndDate).toLocaleDateString()}
+                  </p>
+                  {selectedUser.premiumPlan && (
+                    <p className="text-xs text-muted-foreground">Plan: {selectedUser.premiumPlan}</p>
+                  )}
+                </div>
+              ) : selectedUser.status === "premium" && selectedUser.premiumEndDate && new Date(selectedUser.premiumEndDate) <= new Date() ? (
+                <div className="flex flex-col gap-1">
+                  <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 w-fit">
+                    Premium Expired
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">
+                    Expired: {new Date(selectedUser.premiumEndDate).toLocaleDateString()}
+                  </p>
+                </div>
+              ) : (
+                <Badge variant="outline" className="bg-muted text-muted-foreground w-fit">
+                  Free
+                </Badge>
+              )}
             </div>
 
             {/* Progress */}
@@ -596,7 +698,13 @@ const UsersPage = () => {
               <Button
                 size="sm"
                 className="text-xs w-full"
-                onClick={handleTogglePremium}
+                onClick={() => {
+                  if (selectedUser.status === "premium") {
+                    togglePremiumMutation.mutate(selectedUser.id);
+                  } else {
+                    setGrantPremiumDialogOpen(true);
+                  }
+                }}
                 disabled={actionLoading === "premium"}
               >
                 <Crown className="h-3 w-3 mr-1" />
@@ -894,6 +1002,86 @@ const UsersPage = () => {
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleteLoading}>
               {deleteLoading ? "Deleting..." : "Permanently Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Grant Premium Modal ── */}
+      <Dialog
+        open={grantPremiumDialogOpen}
+        onOpenChange={(v) => {
+          if (!v) {
+            setGrantPremiumDialogOpen(false);
+            setGrantConfirmText("");
+            setGrantPlan("Monthly");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="h-4 w-4 text-warning" />
+              Grant Premium Access
+            </DialogTitle>
+            <DialogDescription>
+              Grant premium subscription to <strong>{selectedUser?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label>Plan</Label>
+              <Select value={grantPlan} onValueChange={setGrantPlan}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Monthly">Monthly (30 days)</SelectItem>
+                  <SelectItem value="Quarterly">Quarterly (90 days)</SelectItem>
+                  <SelectItem value="Annual">Annual (365 days)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Auto-calculated date preview */}
+            <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Subscription Period</p>
+              <p>Start: <span className="font-medium text-foreground">{getGrantDates(grantPlan).startDate}</span></p>
+              <p>End: <span className="font-medium text-foreground">{getGrantDates(grantPlan).endDate}</span></p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="grant-confirm">
+                Type <strong>GRANT</strong> to confirm
+              </Label>
+              <Input
+                id="grant-confirm"
+                placeholder="GRANT"
+                value={grantConfirmText}
+                onChange={(e) => setGrantConfirmText(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGrantPremiumDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                grantConfirmText !== "GRANT" ||
+                actionLoading === "premium"
+              }
+              onClick={() => {
+                if (selectedUser) {
+                  const { startDate, endDate } = getGrantDates(grantPlan);
+                  grantPremiumMutation.mutate({
+                    id: selectedUser.id,
+                    startDate,
+                    endDate,
+                    plan: grantPlan,
+                  });
+                }
+              }}
+            >
+              {actionLoading === "premium" ? "Granting..." : "Grant Access"}
             </Button>
           </DialogFooter>
         </DialogContent>

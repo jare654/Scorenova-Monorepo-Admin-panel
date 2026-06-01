@@ -83,6 +83,12 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
 
   try {
     return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    // Silently re-throw AbortError — it's normal React Query cleanup on unmount/navigation
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw err;
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -195,6 +201,12 @@ export class ApiClient {
       let lastError: Error | null = null;
 
       for (let attempt = 0; attempt <= retries; attempt += 1) {
+        // If the signal was already aborted before we start, bail out silently
+        if (signal?.aborted) {
+          const abortErr = new DOMException("signal is aborted without reason", "AbortError");
+          throw abortErr;
+        }
+
         const response = await fetchWithTimeout(url, requestOptions, timeoutMs);
 
         if (response.status === 429) {
@@ -262,6 +274,19 @@ export class ApiClient {
 
   async delete<T>(endpoint: string, signal?: AbortSignal, options?: ApiClientOptions): Promise<T> {
     return this.request<T>("DELETE", endpoint, undefined, signal, options);
+  }
+
+  /** Clear the GET response cache for a specific endpoint (call after mutations that affect that data) */
+  clearCache(endpoint: string): void {
+    const url = `${API_URL}${endpoint}`;
+    getResponseCache.delete(url);
+    inflightGetRequests.delete(url);
+  }
+
+  /** Clear all GET response cache entries */
+  clearAllCache(): void {
+    getResponseCache.clear();
+    inflightGetRequests.clear();
   }
 }
 

@@ -72,6 +72,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       return { success: true };
     } catch (error: any) {
+      // AbortError is normal React cleanup during navigation — not a real login failure
+      if (error?.name === "AbortError" || error?.message?.includes("aborted")) {
+        return { success: true };
+      }
       return { success: false, message: error.message || "An error occurred. Please try again." };
     }
   };

@@ -1,23 +1,26 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo } from "react";
 import {
-  BookOpen, Loader2, Search, Plus, Trash2, Eye,
-  CheckCircle2, XCircle, Sparkles, Hash, Clock,
-  ChevronRight, ChevronLeft, AlertCircle,
+  BookOpen, Loader2, Search, Trash2, Eye,
+  CheckCircle2, XCircle, Sparkles, Hash,
+  AlertCircle, ChevronLeft, FlaskConical,
+  Globe, Calculator, Atom, Leaf, BookMarked,
+  Users, Brain,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import {
   fetchMockSubjects, fetchAdminMockExams, fetchAdminMockExam,
   generateMockExam, deleteMockExam, pollMockExamUntilDone,
+  fetchMockResults,
   type MockSubject, type MockExamSummary, type MockExamDetail,
+  type MockResult,
 } from "@/services/api/mock";
 import {
-  fetchExamSessions, fetchSubjects, fetchStreams,
-  type ExamSession, type Subject, type Stream,
+  fetchSubjects, fetchStreams,
+  type Subject, type Stream,
 } from "@/services/api/content";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -33,6 +36,81 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+
+// ─── Subject icon map ─────────────────────────────────────────────────────────
+const SUBJECT_ICONS: Record<string, React.ElementType> = {
+  mathematics:  Calculator,
+  physics:      Atom,
+  chemistry:    FlaskConical,
+  biology:      Leaf,
+  english:      BookMarked,
+  civics:       Users,
+  geography:    Globe,
+  history:      BookOpen,
+  aptitude:     Brain,
+};
+
+function getSubjectIcon(name: string): React.ElementType {
+  const key = name.toLowerCase().split(" ")[0];
+  return SUBJECT_ICONS[key] ?? BookOpen;
+}
+
+const SUBJECT_COLORS: Record<string, string> = {
+  "mathematics (natural science)": "bg-blue-500/10 text-blue-600 border-blue-200",
+  "mathematics (social science)":  "bg-amber-500/10 text-violet-600 border-violet-200",
+  mathematics:                     "bg-amber-500/10 text-blue-600 border-blue-200",
+  physics:                         "bg-amber-500/10 text-purple-600 border-purple-200",
+  chemistry:                       "bg-amber-500/10 text-orange-600 border-orange-200",
+  biology:                         "bg-amber-500/10 text-green-600 border-green-200",
+  english:                         "bg-amber-500/10 text-pink-600 border-pink-200",
+  civics:                          "bg-amber-500/10 text-yellow-600 border-yellow-200",
+  geography:                       "bg-amber-500/10 text-teal-600 border-teal-200",
+  history:                         "bg-amber-500/10 text-amber-600 border-amber-200",
+  aptitude:                        "bg-amber-500/10 text-indigo-600 border-indigo-200",
+};
+
+function getSubjectColor(name: string): string {
+  const key = name.toLowerCase().trim();
+  return SUBJECT_COLORS[key] ?? SUBJECT_COLORS[key.split(" ")[0]] ?? "bg-primary/10 text-primary border-primary/20";
+}
+
+// ─── Deduplicate subjects by base name (English, Aptitude, Civics shared) ─────
+function deduplicateSubjects(
+  subjects: MockSubject[],
+  streamNameById: Map<string, string>,
+): { name: string; ids: string[]; streamId: string | null }[] {
+  const SHARED = ["english", "aptitude", "civics"];
+  const map = new Map<string, { name: string; ids: string[]; streamId: string | null }>();
+
+  for (const s of subjects) {
+    const baseName = s.name.replace(/\s*\(.*?\)\s*$/, "").trim();
+    const key = baseName.toLowerCase();
+    const isShared = SHARED.some((k) => key.startsWith(k));
+
+    if (isShared) {
+      // Merge all stream variants into one entry, strip suffix, streamId: null
+      if (!map.has(baseName)) {
+        map.set(baseName, { name: baseName, ids: [s.id], streamId: null });
+      } else {
+        map.get(baseName)!.ids.push(s.id);
+      }
+    } else {
+      // Group by (baseName + streamId) so two subjects with the same name but
+      // different streamIds each get their own card.
+      const groupKey = `${baseName}::${s.streamId ?? ""}`;
+      if (!map.has(groupKey)) {
+        const displayName = s.streamId
+          ? `${baseName} (${streamNameById.get(s.streamId) ?? s.streamId})`
+          : baseName;
+        map.set(groupKey, { name: displayName, ids: [s.id], streamId: s.streamId });
+      } else {
+        map.get(groupKey)!.ids.push(s.id);
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
 
 // ─── Exam Detail Dialog ───────────────────────────────────────────────────────
 interface ExamDetailProps { exam: MockExamDetail | null; open: boolean; onClose: () => void; }
@@ -84,19 +162,35 @@ const ExamDetailDialog = ({ exam, open, onClose }: ExamDetailProps) => {
 interface GenerateDialogProps {
   open: boolean;
   onClose: () => void;
-  subjects: MockSubject[];
-  streamNameById: Map<string, string>;
+  subjectId: string;
+  subjectName: string;
+  subjectIds: string[]; // all IDs for this subject (shared subjects have multiple)
+  /** null means this is a shared subject (English, Aptitude, Civics) — no stream picker */
+  groupStreamId: string | null;
   onGenerate: (subjectId: string, questionCount: number) => void;
   generating: boolean;
+  allSubjects: MockSubject[];
+  streamNameById: Map<string, string>;
 }
-const GenerateDialog = ({ open, onClose, subjects, streamNameById, onGenerate, generating }: GenerateDialogProps) => {
-  const [subjectId, setSubjectId]         = useState("");
+const GenerateDialog = ({
+  open, onClose, subjectId, subjectName, subjectIds, groupStreamId,
+  onGenerate, generating, allSubjects, streamNameById,
+}: GenerateDialogProps) => {
+  const [selectedSubjectId, setSelectedSubjectId] = useState(subjectId);
   const [questionCount, setQuestionCount] = useState("50");
 
+  // Reset when dialog opens
   const handleOpen = (v: boolean) => {
-    if (v) { setSubjectId(""); setQuestionCount("50"); }
+    if (v) { setSelectedSubjectId(subjectId); setQuestionCount("50"); }
     else onClose();
   };
+
+  // Filter to only the subjects matching this subject group
+  const relevantSubjects = allSubjects.filter((s) => subjectIds.includes(s.id));
+
+  // Show stream selector only for stream-specific subjects (groupStreamId !== null)
+  // Shared subjects (English, Aptitude, Civics) have groupStreamId === null — no picker needed
+  const showStreamPicker = groupStreamId !== null && relevantSubjects.length > 1;
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
@@ -104,38 +198,32 @@ const GenerateDialog = ({ open, onClose, subjects, streamNameById, onGenerate, g
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Generate Mock Exam
+            Generate Mock Exam — {subjectName}
           </DialogTitle>
           <DialogDescription>
-            Mistral AI will generate EUEE-style questions for the selected subject.
-            Existing questions are automatically avoided.
+            Mistral AI will generate EUEE-style questions. Existing questions are automatically avoided.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-1">
-          <div className="space-y-1.5">
-            <Label>Subject *</Label>
-            <Select value={subjectId} onValueChange={setSubjectId}>
-              <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-              <SelectContent>
-                {subjects.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                    {s.streamId && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({streamNameById.get(s.streamId) ?? "—"})
-                      </span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {showStreamPicker && (
+            <div className="space-y-1.5">
+              <Label>Stream *</Label>
+              <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {relevantSubjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {streamNameById.get(s.streamId ?? "") ?? s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Number of Questions *</Label>
             <Input
-              type="number"
-              min={5}
-              max={100}
+              type="number" min={5} max={100}
               value={questionCount}
               onChange={(e) => setQuestionCount(e.target.value)}
               placeholder="e.g. 50"
@@ -147,9 +235,7 @@ const GenerateDialog = ({ open, onClose, subjects, streamNameById, onGenerate, g
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               <div>
                 <p className="font-medium">Generating your exam…</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  This runs in the background. The dialog will close when done.
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Runs in background. Dialog closes when done.</p>
               </div>
             </div>
           )}
@@ -157,8 +243,8 @@ const GenerateDialog = ({ open, onClose, subjects, streamNameById, onGenerate, g
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={generating}>Cancel</Button>
           <Button
-            onClick={() => onGenerate(subjectId, parseInt(questionCount) || 50)}
-            disabled={!subjectId || generating}
+            onClick={() => onGenerate(selectedSubjectId, parseInt(questionCount) || 50)}
+            disabled={!selectedSubjectId || generating}
           >
             {generating
               ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Generating…</>
@@ -170,25 +256,64 @@ const GenerateDialog = ({ open, onClose, subjects, streamNameById, onGenerate, g
   );
 };
 
+// ─── Subject Grid Card ────────────────────────────────────────────────────────
+interface SubjectCardProps {
+  name: string;
+  examCount: number;
+  onClick: () => void;
+}
+const SubjectCard = ({ name, examCount, onClick }: SubjectCardProps) => {
+  const Icon = getSubjectIcon(name);
+  const colorClass = getSubjectColor(name);
+  // Split "Mathematics (Natural Science)" → title: "Mathematics", stream: "Natural Science"
+  const streamMatch = name.match(/\(([^)]+)\)$/);
+  const displayName = streamMatch ? name.replace(/\s*\([^)]+\)$/, "").trim() : name;
+  const streamLabel = streamMatch ? streamMatch[1] : null;
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all hover:shadow-md hover:-translate-y-0.5 ${colorClass} bg-card`}
+    >
+      <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${colorClass}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="w-full">
+        <p className="font-semibold text-sm leading-tight">{displayName}</p>
+        {streamLabel && (
+          <p className="text-xs font-medium mt-0.5 opacity-80">{streamLabel}</p>
+        )}
+        <p className="text-xs text-muted-foreground mt-1">
+          {examCount === 0 ? "No exams yet" : `${examCount} exam${examCount !== 1 ? "s" : ""}`}
+        </p>
+      </div>
+    </button>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const MockExamsPage = () => {
   const { token, initialized } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [subjectFilter, setSubjectFilter]   = useState("all");
+  // ── All useState hooks first ───────────────────────────────────────────────
+  const [selectedSubjectName, setSelectedSubjectName] = useState<string | null>(null);
+  const [streamFilter, setStreamFilter]     = useState<string>("all"); // "all" | "natural" | "social"
   const [examSearch, setExamSearch]         = useState("");
   const [sessionSearch, setSessionSearch]   = useState("");
   const [sessionSubjectFilter, setSessionSubjectFilter] = useState("all");
   const [sessionPage, setSessionPage]       = useState(1);
   const [generateOpen, setGenerateOpen]     = useState(false);
+  const [generateSubjectGroup, setGenerateSubjectGroup] = useState<{
+    name: string; ids: string[]; streamId: string | null;
+  } | null>(null);
   const [previewExam, setPreviewExam]       = useState<MockExamDetail | null>(null);
   const [previewOpen, setPreviewOpen]       = useState(false);
   const [deleteTarget, setDeleteTarget]     = useState<{ id: string; label: string } | null>(null);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
   const sessionPerPage = 20;
 
-  // ── Streams
+  // ── Streams ────────────────────────────────────────────────────────────────
   const { data: streams = [] } = useQuery<Stream[], Error>({
     queryKey: ["streams"],
     queryFn: ({ signal }) => fetchStreams(signal),
@@ -197,12 +322,12 @@ const MockExamsPage = () => {
   });
   const streamNameById = useMemo(() => new Map(streams.map((s) => [s.id, s.name])), [streams]);
 
-  // ── Subjects
+  // ── Subjects ───────────────────────────────────────────────────────────────
   const { data: mockSubjects = [], isLoading: subjectsLoading } = useQuery<MockSubject[], Error>({
     queryKey: ["mock-subjects"],
     queryFn: ({ signal }) => fetchMockSubjects(signal),
     enabled: initialized && !!token,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60_000,
   });
 
   const { data: allSubjects = [] } = useQuery<Subject[], Error>({
@@ -212,27 +337,19 @@ const MockExamsPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // ── Admin mock exams list — auto-refetch while any exam is pending
+  // ── Admin mock exams list ──────────────────────────────────────────────────
   const { data: adminExams = [], isLoading: examsLoading } = useQuery<MockExamSummary[], Error>({
-    queryKey: ["admin-mock-exams", subjectFilter],
-    queryFn: ({ signal }) => fetchAdminMockExams(
-      subjectFilter === "all" ? undefined : subjectFilter,
-      signal,
-    ),
+    queryKey: ["admin-mock-exams"],
+    queryFn: ({ signal }) => fetchAdminMockExams(undefined, signal),
     enabled: initialized && !!token,
-    staleTime: 30_000,
-    // Poll every 15s only while an exam is still generating — stops automatically when done
-    refetchInterval: (query) => {
-      const exams = query.state.data ?? [];
-      return exams.some((e) => e.status === "pending") ? 15_000 : false;
-    },
-    refetchIntervalInBackground: false, // only poll when tab is active
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
-  // ── Exam sessions
-  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
-    queryKey: ["exam-sessions", sessionPage, sessionSubjectFilter],
-    queryFn: ({ signal }) => fetchExamSessions({
+  // ── Mock exam results ──────────────────────────────────────────────────────
+  const { data: resultsData, isLoading: resultsLoading } = useQuery({
+    queryKey: ["mock-results", sessionPage, sessionSubjectFilter],
+    queryFn: ({ signal }) => fetchMockResults({
       page: sessionPage,
       limit: sessionPerPage,
       subjectId: sessionSubjectFilter === "all" ? undefined : sessionSubjectFilter,
@@ -241,31 +358,81 @@ const MockExamsPage = () => {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
-  const sessions: ExamSession[] = sessionsData?.data ?? [];
-  const sessionsTotal      = sessionsData?.total ?? 0;
-  const sessionsTotalPages = sessionsData?.totalPages ?? 1;
+  const results: MockResult[]  = resultsData?.data ?? [];
+  const resultsTotal           = resultsData?.total ?? 0;
+  const resultsTotalPages      = resultsData?.totalPages ?? 1;
 
-  // ── Generate mutation — async: POST returns immediately, then poll
+  // ── Derived data — all useMemo in dependency order ─────────────────────────
+
+  // 1. Subject groups (must come before selectedSubjectGroup)
+  const subjectGroups = useMemo(
+    () => deduplicateSubjects(mockSubjects, streamNameById),
+    [mockSubjects, streamNameById],
+  );
+
+  // 2. Resolve selected group from live subjectGroups — always up-to-date IDs
+  //    This is the key fix: shared subjects (Aptitude, English, Civics) have
+  //    multiple stream IDs; storing only the name ensures we always use the
+  //    current ID list after any query invalidation.
+  const selectedSubjectGroup = useMemo(
+    () => selectedSubjectName
+      ? (subjectGroups.find((g) => g.name === selectedSubjectName) ?? null)
+      : null,
+    [selectedSubjectName, subjectGroups],
+  );
+
+  // 3. Exam count per card
+  const examCountByGroupName = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const group of subjectGroups) {
+      const count = adminExams.filter((e) => group.ids.includes(e.subjectId)).length;
+      map.set(group.name, count);
+    }
+    return map;
+  }, [subjectGroups, adminExams]);
+
+  // 4. Exams for the drilled-in subject — uses live IDs from selectedSubjectGroup
+  const groupFilteredExams = useMemo(() => {
+    if (!selectedSubjectGroup) return adminExams;
+    return adminExams.filter((e) => selectedSubjectGroup.ids.includes(e.subjectId));
+  }, [adminExams, selectedSubjectGroup]);
+
+  // 5. Subject name lookup for exam table
+  const subjectNameById = useMemo(
+    () => new Map(allSubjects.map((s) => [s.id, s.name])),
+    [allSubjects],
+  );
+
+  const filteredExams = groupFilteredExams.filter((e) =>
+    !examSearch || e.label.toLowerCase().includes(examSearch.toLowerCase()),
+  );
+
+  const filteredResults = results.filter((r) =>
+    !sessionSearch ||
+    r.studentName.toLowerCase().includes(sessionSearch.toLowerCase()) ||
+    r.subjectName.toLowerCase().includes(sessionSearch.toLowerCase()) ||
+    r.examLabel.toLowerCase().includes(sessionSearch.toLowerCase()) ||
+    r.studentPhone.includes(sessionSearch),
+  );
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
+
   const generateMutation = useMutation({
     mutationFn: async ({ subjectId, questionCount }: { subjectId: string; questionCount: number }) => {
-      // Step 1: create the exam record (returns immediately with status=pending)
       const pending = await generateMockExam(subjectId, questionCount);
-      // Refresh list so the pending exam shows up right away
       qc.invalidateQueries({ queryKey: ["admin-mock-exams"] });
-      // Step 2: poll until completed or failed
-      const done = await pollMockExamUntilDone(pending.id, () => {
-        // Refresh list on each poll tick so question count updates live
-        qc.invalidateQueries({ queryKey: ["admin-mock-exams"] });
-      });
+      const done = await pollMockExamUntilDone(pending.id);
       return done;
     },
     onSuccess: (exam) => {
       qc.invalidateQueries({ queryKey: ["admin-mock-exams"] });
+      qc.invalidateQueries({ queryKey: ["mock-subjects"] });
       toast({
         title: "Exam generated",
         description: `${exam.label} created with ${exam.questionCount} questions.`,
       });
       setGenerateOpen(false);
+      setGenerateSubjectGroup(null);
     },
     onError: (e: Error) => toast({
       title: "Generation failed",
@@ -274,7 +441,6 @@ const MockExamsPage = () => {
     }),
   });
 
-  // ── Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteMockExam(id),
     onSuccess: () => {
@@ -284,6 +450,8 @@ const MockExamsPage = () => {
     },
     onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
   });
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handlePreview = async (exam: MockExamSummary) => {
     setLoadingPreviewId(exam.id);
@@ -298,35 +466,41 @@ const MockExamsPage = () => {
     }
   };
 
-  const filteredExams = adminExams.filter((e) =>
-    !examSearch || e.label.toLowerCase().includes(examSearch.toLowerCase()),
-  );
-
-  const filteredSessions = sessions.filter((s) =>
-    !sessionSearch ||
-    s.studentName.toLowerCase().includes(sessionSearch.toLowerCase()) ||
-    s.subjectName.toLowerCase().includes(sessionSearch.toLowerCase()) ||
-    s.studentPhone.includes(sessionSearch),
-  );
-
-  // Group exams by subject for display
-  const subjectNameById = useMemo(
-    () => new Map(allSubjects.map((s) => [s.id, s.name])),
-    [allSubjects],
-  );
+  const handleOpenGenerate = (group: { name: string; ids: string[]; streamId: string | null }) => {
+    setGenerateSubjectGroup(group);
+    setGenerateOpen(true);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Mock Exams</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Generate AI-powered EUEE mock exams and monitor student results.
-          </p>
+        <div className="flex items-center gap-3">
+          {selectedSubjectGroup && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => { setSelectedSubjectName(null); setExamSearch(""); }}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          )}
+          <div>
+            <h2 className="text-lg font-semibold">
+              {selectedSubjectGroup ? selectedSubjectGroup.name : "Mock Exams"}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {selectedSubjectGroup
+                ? "AI-powered EUEE mock exams for this subject."
+                : "Generate AI-powered EUEE mock exams and monitor student results."}
+            </p>
+          </div>
         </div>
-        <Button onClick={() => setGenerateOpen(true)}>
-          <Sparkles className="h-4 w-4 mr-1" /> Create Mock Exam
-        </Button>
+        {selectedSubjectGroup && (
+          <Button onClick={() => handleOpenGenerate(selectedSubjectGroup)}>
+            <Sparkles className="h-4 w-4 mr-1" /> Create Mock Exam
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="exams">
@@ -337,101 +511,155 @@ const MockExamsPage = () => {
 
         {/* ══ EXAMS TAB ═════════════════════════════════════════════════════ */}
         <TabsContent value="exams" className="mt-4 space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search exams…" value={examSearch} onChange={(e) => setExamSearch(e.target.value)} className="pl-9" />
-            </div>
-            <Select value={subjectFilter} onValueChange={(v) => { setSubjectFilter(v); }}>
-              <SelectTrigger className="w-48"><SelectValue placeholder="All Subjects" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Subjects</SelectItem>
-                {allSubjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
 
-          {examsLoading ? (
-            <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : filteredExams.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-              <Sparkles className="h-10 w-10 mb-3 opacity-30" />
-              <p className="text-sm font-medium">No mock exams yet</p>
-              <p className="text-xs mt-1">Click "Create Mock Exam" to generate your first AI-powered exam.</p>
-            </div>
-          ) : (
-            <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    {["Exam", "Subject", "Questions", "Created", "Actions"].map((h) => (
-                      <th key={h} className="p-3 text-left font-medium text-muted-foreground">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredExams.map((exam) => (
-                    <tr key={exam.id} className="border-b hover:bg-muted/30 transition-colors">
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            {exam.status === "pending"
-                              ? <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                              : exam.status === "failed"
-                                ? <AlertCircle className="h-4 w-4 text-destructive" />
-                                : <BookOpen className="h-4 w-4 text-primary" />}
-                          </div>
-                          <div>
-                            <span className="font-medium">{exam.label}</span>
-                            {exam.status === "pending" && (
-                              <p className="text-xs text-muted-foreground">Generating…</p>
-                            )}
-                            {exam.status === "failed" && (
-                              <p className="text-xs text-destructive">Failed</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-sm text-muted-foreground">
-                        {subjectNameById.get(exam.subjectId) ?? "—"}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-1.5 text-sm">
-                          <Hash className="h-3.5 w-3.5 text-muted-foreground" />
-                          {exam.questionCount}
-                        </div>
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">
-                        {new Date(exam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handlePreview(exam)}
-                            disabled={loadingPreviewId === exam.id || (exam.status != null && exam.status !== "completed")}
-                          >
-                            {loadingPreviewId === exam.id
-                              ? <Loader2 className="h-4 w-4 animate-spin" />
-                              : <Eye className="h-4 w-4" />}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            onClick={() => setDeleteTarget({ id: exam.id, label: exam.label })}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+          {/* ── Subject Grid (no subject selected) ── */}
+          {!selectedSubjectGroup ? (
+            subjectsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : subjectGroups.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                <BookOpen className="h-10 w-10 mb-3 opacity-30" />
+                <p className="text-sm font-medium">No subjects available</p>
+                <p className="text-xs mt-1">Subjects will appear here once configured.</p>
+              </div>
+            ) : (
+              <>
+                {/* Stream filter for subject grid */}
+                <div className="flex gap-2 mb-2">
+                  {["all", "natural", "social"].map((f) => (
+                    <Button
+                      key={f}
+                      variant={streamFilter === f ? "default" : "outline"}
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setStreamFilter(f)}
+                    >
+                      {f === "all" ? "All Streams" : f === "natural" ? "Natural Science" : "Social Science"}
+                    </Button>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {subjectGroups
+                  .filter((group) => {
+                    if (streamFilter === "all") return true;
+                    const nameLower = group.name.toLowerCase();
+                    if (streamFilter === "natural") return nameLower.includes("natural") || (!nameLower.includes("social") && !nameLower.includes("natural"));
+                    if (streamFilter === "social") return nameLower.includes("social") || (!nameLower.includes("natural") && !nameLower.includes("social"));
+                    return true;
+                  })
+                  .map((group) => (
+                  <SubjectCard
+                    key={group.name}
+                    name={group.name}
+                    examCount={examCountByGroupName.get(group.name) ?? 0}
+                    onClick={() => setSelectedSubjectName(group.name)}
+                  />
+                ))}
+              </div>
+              </>
+            )
+          ) : (
+            /* ── Exam List (subject drilled in) ── */
+            <>
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search exams…"
+                    value={examSearch}
+                    onChange={(e) => setExamSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {examsLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredExams.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                  <Sparkles className="h-10 w-10 mb-3 opacity-30" />
+                  <p className="text-sm font-medium">No mock exams yet</p>
+                  <p className="text-xs mt-1">Click "Create Mock Exam" to generate your first AI-powered exam.</p>
+                </div>
+              ) : (
+                <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        {["Exam", "Subject", "Questions", "Created", "Actions"].map((h) => (
+                          <th key={h} className="p-3 text-left font-medium text-muted-foreground">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredExams.map((exam) => (
+                        <tr key={exam.id} className="border-b hover:bg-muted/30 transition-colors">
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                {exam.status === "pending"
+                                  ? <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                                  : exam.status === "failed"
+                                    ? <AlertCircle className="h-4 w-4 text-destructive" />
+                                    : <BookOpen className="h-4 w-4 text-primary" />}
+                              </div>
+                              <div>
+                                <span className="font-medium">{exam.label}</span>
+                                {exam.status === "pending" && (
+                                  <p className="text-xs text-muted-foreground">Generating…</p>
+                                )}
+                                {exam.status === "failed" && (
+                                  <p className="text-xs text-destructive">Failed</p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3 text-sm text-muted-foreground">
+                            {subjectNameById.get(exam.subjectId) ?? "—"}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-1.5 text-sm">
+                              <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                              {exam.questionCount}
+                            </div>
+                          </td>
+                          <td className="p-3 text-xs text-muted-foreground">
+                            {new Date(exam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handlePreview(exam)}
+                                disabled={loadingPreviewId === exam.id || (exam.status != null && exam.status !== "completed")}
+                              >
+                                {loadingPreviewId === exam.id
+                                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                                  : <Eye className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => setDeleteTarget({ id: exam.id, label: exam.label })}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -451,12 +679,12 @@ const MockExamsPage = () => {
             </Select>
           </div>
 
-          {sessionsLoading ? (
+          {resultsLoading ? (
             <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : filteredSessions.length === 0 ? (
+          ) : filteredResults.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
               <BookOpen className="h-10 w-10 mb-3 opacity-30" />
-              <p className="text-sm">{sessionSearch ? "No sessions match your search." : "No exam sessions recorded yet."}</p>
+              <p className="text-sm">{sessionSearch ? "No results match your search." : "No exam results recorded yet."}</p>
             </div>
           ) : (
             <>
@@ -464,32 +692,33 @@ const MockExamsPage = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      {["Student", "Subject", "Score", "Result", "Date"].map((h) => (
+                      {["Student", "Exam", "Subject", "Score", "Result", "Date"].map((h) => (
                         <th key={h} className="p-3 text-left font-medium text-muted-foreground">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSessions.map((session) => (
-                      <tr key={session.sessionId} className="border-b hover:bg-muted/30 transition-colors">
+                    {filteredResults.map((result) => (
+                      <tr key={result.sessionId} className="border-b hover:bg-muted/30 transition-colors">
                         <td className="p-3">
-                          <p className="font-medium">{session.studentName}</p>
-                          <p className="text-xs text-muted-foreground">{session.studentPhone}</p>
+                          <p className="font-medium">{result.studentName}</p>
+                          <p className="text-xs text-muted-foreground">{result.studentPhone}</p>
                         </td>
-                        <td className="p-3 text-sm">{session.subjectName}</td>
+                        <td className="p-3 text-xs text-muted-foreground">{result.examLabel}</td>
+                        <td className="p-3 text-sm">{result.subjectName}</td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold">{session.scorePercent}%</span>
-                            <span className="text-xs text-muted-foreground">({session.correct}/{session.totalQ})</span>
+                            <span className="font-semibold">{result.scorePercent}%</span>
+                            <span className="text-xs text-muted-foreground">({result.correct}/{result.totalQ})</span>
                           </div>
                         </td>
                         <td className="p-3">
-                          {session.passed
+                          {result.passed
                             ? <div className="flex items-center gap-1.5 text-success text-xs font-medium"><CheckCircle2 className="h-4 w-4" />Passed</div>
                             : <div className="flex items-center gap-1.5 text-destructive text-xs font-medium"><XCircle className="h-4 w-4" />Failed</div>}
                         </td>
                         <td className="p-3 text-xs text-muted-foreground">
-                          {new Date(session.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          {new Date(result.takenAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </td>
                       </tr>
                     ))}
@@ -498,16 +727,16 @@ const MockExamsPage = () => {
               </div>
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  {sessionsTotal === 0 ? "No results" : `Showing ${(sessionPage - 1) * sessionPerPage + 1}–${Math.min(sessionPage * sessionPerPage, sessionsTotal)} of ${sessionsTotal}`}
+                  {resultsTotal === 0 ? "No results" : `Showing ${(sessionPage - 1) * sessionPerPage + 1}–${Math.min(sessionPage * sessionPerPage, resultsTotal)} of ${resultsTotal}`}
                 </p>
                 <div className="flex gap-1">
                   <Button variant="outline" size="sm" disabled={sessionPage === 1} onClick={() => setSessionPage(sessionPage - 1)}>Previous</Button>
-                  {Array.from({ length: Math.min(5, sessionsTotalPages) }, (_, i) => {
+                  {Array.from({ length: Math.min(5, resultsTotalPages) }, (_, i) => {
                     const p = sessionPage <= 3 ? i + 1 : sessionPage - 2 + i;
-                    if (p > sessionsTotalPages) return null;
+                    if (p > resultsTotalPages) return null;
                     return <Button key={p} variant={p === sessionPage ? "default" : "outline"} size="sm" onClick={() => setSessionPage(p)}>{p}</Button>;
                   })}
-                  <Button variant="outline" size="sm" disabled={sessionPage >= sessionsTotalPages} onClick={() => setSessionPage(sessionPage + 1)}>Next</Button>
+                  <Button variant="outline" size="sm" disabled={sessionPage >= resultsTotalPages} onClick={() => setSessionPage(sessionPage + 1)}>Next</Button>
                 </div>
               </div>
             </>
@@ -516,16 +745,22 @@ const MockExamsPage = () => {
       </Tabs>
 
       {/* ── Generate Dialog ── */}
-      <GenerateDialog
-        open={generateOpen}
-        onClose={() => setGenerateOpen(false)}
-        subjects={mockSubjects}
-        streamNameById={streamNameById}
-        generating={generateMutation.isPending}
-        onGenerate={(subjectId, questionCount) =>
-          generateMutation.mutate({ subjectId, questionCount })
-        }
-      />
+      {generateSubjectGroup && (
+        <GenerateDialog
+          open={generateOpen}
+          onClose={() => { setGenerateOpen(false); setGenerateSubjectGroup(null); }}
+          subjectId={generateSubjectGroup.ids[0]}
+          subjectName={generateSubjectGroup.name}
+          subjectIds={generateSubjectGroup.ids}
+          groupStreamId={generateSubjectGroup.streamId}
+          allSubjects={mockSubjects}
+          streamNameById={streamNameById}
+          generating={generateMutation.isPending}
+          onGenerate={(subjectId, questionCount) =>
+            generateMutation.mutate({ subjectId, questionCount })
+          }
+        />
+      )}
 
       {/* ── Preview Dialog ── */}
       <ExamDetailDialog
