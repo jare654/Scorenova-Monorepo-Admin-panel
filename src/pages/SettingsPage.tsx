@@ -504,24 +504,7 @@ const SettingsPage = () => {
 
         {/* Payments */}
         <TabsContent value="payments" className="space-y-6">
-          <div className="bg-card rounded-lg border p-6 space-y-4">
-            <h3 className="font-semibold">Payment Configuration</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label>Monthly Premium Price (ETB)</Label>
-                <Input type="number" defaultValue="99" />
-              </div>
-              <div>
-                <Label>Annual Premium Price (ETB)</Label>
-                <Input type="number" defaultValue="899" />
-              </div>
-              <div>
-                <Label>Trial Period (Days)</Label>
-                <Input type="number" defaultValue="7" />
-              </div>
-            </div>
-            <Button onClick={handleSave}>Save Changes</Button>
-          </div>
+        
           <PremiumSettingsSection />
         </TabsContent>
 
