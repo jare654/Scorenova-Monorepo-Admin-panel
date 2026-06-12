@@ -4,14 +4,14 @@ import {
   CheckCircle2, XCircle, Sparkles, Hash,
   AlertCircle, ChevronLeft, FlaskConical,
   Globe, Calculator, Atom, Leaf, BookMarked,
-  Users, Brain,
+  Users, Brain, Pencil,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import {
   fetchMockSubjects, fetchAdminMockExams, fetchAdminMockExam,
   generateMockExam, deleteMockExam, pollMockExamUntilDone,
-  fetchMockResults,
+  fetchMockResults, renameMockExam,
   type MockSubject, type MockExamSummary, type MockExamDetail,
   type MockResult,
 } from "@/services/api/mock";
@@ -311,6 +311,8 @@ const MockExamsPage = () => {
   const [previewOpen, setPreviewOpen]       = useState(false);
   const [deleteTarget, setDeleteTarget]     = useState<{ id: string; label: string } | null>(null);
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget]         = useState<{ id: string; label: string } | null>(null);
+  const [renameValue, setRenameValue]           = useState("");
   const sessionPerPage = 20;
 
   // ── Streams ────────────────────────────────────────────────────────────────
@@ -439,6 +441,18 @@ const MockExamsPage = () => {
       description: e.message,
       variant: "destructive",
     }),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, label }: { id: string; label: string }) =>
+      renameMockExam(id, label),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin-mock-exams"] });
+      toast({ title: "Renamed", description: `Exam renamed to "${data.label}"` });
+      setRenameTarget(null);
+      setRenameValue("");
+    },
+    onError: (e: Error) => toast({ title: "Rename failed", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -646,6 +660,15 @@ const MockExamsPage = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="h-8 w-8"
+                                title="Rename"
+                                onClick={() => { setRenameTarget({ id: exam.id, label: exam.label }); setRenameValue(exam.label); }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 className="h-8 w-8 text-destructive"
                                 onClick={() => setDeleteTarget({ id: exam.id, label: exam.label })}
                               >
@@ -768,6 +791,37 @@ const MockExamsPage = () => {
         open={previewOpen}
         onClose={() => { setPreviewOpen(false); setPreviewExam(null); }}
       />
+
+      {/* ── Rename Dialog ── */}
+      <Dialog open={!!renameTarget} onOpenChange={(v) => !v && setRenameTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename Exam</DialogTitle>
+            <DialogDescription>Enter a new name for this mock exam.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="e.g. Mock Exam 1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renameValue.trim() && renameTarget) {
+                  renameMutation.mutate({ id: renameTarget.id, label: renameValue.trim() });
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>Cancel</Button>
+            <Button
+              disabled={!renameValue.trim() || renameMutation.isPending}
+              onClick={() => renameTarget && renameMutation.mutate({ id: renameTarget.id, label: renameValue.trim() })}
+            >
+              {renameMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Delete Confirm ── */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>

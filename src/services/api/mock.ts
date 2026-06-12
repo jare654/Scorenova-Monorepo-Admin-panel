@@ -142,6 +142,15 @@ export async function deleteMockExam(
   await apiClient.delete<unknown>(`/mocks/admin/${id}`, signal);
 }
 
+export async function renameMockExam(
+  id: string,
+  label: string,
+  signal?: AbortSignal,
+): Promise<{ success: boolean; label: string }> {
+  const payload = await apiClient.patch<unknown>(`/mocks/admin/${id}/label`, { label }, signal);
+  return normalize<{ success: boolean; label: string }>(payload);
+}
+
 // ─── Shared API ───────────────────────────────────────────────────────────────
 
 export async function fetchMockSubjects(signal?: AbortSignal): Promise<MockSubject[]> {

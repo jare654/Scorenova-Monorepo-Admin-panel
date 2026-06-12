@@ -21,6 +21,8 @@ import { AuthProvider } from "@/components/auth/context/AuthContext";
 import ProtectedRoute from "./components/auth/components/ProtectedRoute";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import EditProfilePage from "../src/pages/EditProfilePage";
+import NotificationTestPage from "./pages/NotificationTestPage";
+import ReportsPage from "./pages/ReportsPage";
 import { AccountsProvider } from "@/components/auth/context/Accountcontext";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -39,8 +41,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      staleTime: 30 * 1000, // Keep data fresh for 30s before refetching
-      retry: 1, // Minimize retry attempts on failure to reduce backend load
+      staleTime: 0, // Always refetch after invalidation — ensures real-time updates
+      retry: 1,
     },
   },
 });
@@ -78,10 +80,9 @@ const App = () => (
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/admin-profile" element={<AdminProfilePage />} />
                   <Route path="/edit-profile" element={<EditProfilePage />} />
-                  <Route
-                    path="/change-password"
-                    element={<ChangePasswordPage />}
-                  />
+                  <Route path="/change-password" element={<ChangePasswordPage />} />
+                  <Route path="/notification-test" element={<NotificationTestPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
                 </Route>
 
                 <Route path="*" element={<NotFound />} />

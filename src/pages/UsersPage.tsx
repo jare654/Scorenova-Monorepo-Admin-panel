@@ -340,14 +340,18 @@ const UsersPage = () => {
     if (
       search &&
       !u.name.toLowerCase().includes(search.toLowerCase()) &&
-      !u.email.toLowerCase().includes(search.toLowerCase()) &&
+      !(u.email ?? "").toLowerCase().includes(search.toLowerCase()) &&
       !u.phoneNumber.includes(search)
     )
       return false;
-    // statusFilter: "premium" checks isPremium boolean; "free"/"trial" check the status string
+
+    // Use isPremium boolean as the single source of truth —
+    // the "status" string field is unreliable from the API.
     if (statusFilter === "premium" && !u.isPremium) return false;
-    if (statusFilter === "free" && (u.isPremium || u.status === "trial")) return false;
+    if (statusFilter === "free" && u.isPremium) return false;
+    // "trial" filter: no trial concept in the backend, so fall through gracefully
     if (statusFilter === "trial" && u.status !== "trial") return false;
+
     if (streamFilter !== "all" && u.gradeId !== streamFilter) return false;
     if (activityFilter === "active" && !u.isActive) return false;
     if (activityFilter === "suspended" && u.isActive) return false;

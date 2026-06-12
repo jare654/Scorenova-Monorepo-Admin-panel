@@ -20,56 +20,235 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, AlertTriangle, Eye, EyeOff, Loader2 } from "lucide-react";
+import {
+  Plus,
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Loader2,
+  Calendar,
+  BarChart2,
+  Crown,
+  ChevronDown,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api/client";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
-// ─── Premium Settings Section ─────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type PremiumSettings = {
-  premiumPrice?: number;
-  durationDays?: number;
+  monthlyPrice?: number;
+  monthlyDurationDays?: number;
+  quarterlyPrice?: number;
+  quarterlyDurationDays?: number;
+  annualPrice?: number;
+  annualDurationDays?: number;
   currency?: string;
   telegramSupport?: string;
   benefitsDescription?: string;
 };
 
+// ─── Plan Accordion Item ──────────────────────────────────────────────────────
+
+type PlanAccordionItemProps = {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  period: string;
+  badge?: string;
+  price: number | "";
+  durationDays: number | "";
+  currency: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onPriceChange: (v: number | "") => void;
+  onDaysChange: (v: number | "") => void;
+  iconBg: string;
+  iconColor: string;
+};
+
+const PlanAccordionItem = ({
+  label,
+  icon,
+  period,
+  badge,
+  price,
+  durationDays,
+  currency,
+  isOpen,
+  onToggle,
+  onPriceChange,
+  onDaysChange,
+  iconBg,
+  iconColor,
+}: PlanAccordionItemProps) => {
+  const curr = currency || "ETB";
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border transition-colors duration-150",
+        isOpen ? "border-border" : "border-border/60",
+      )}
+    >
+      {/* Header — click to expand */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/40 transition-colors rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {/* Icon */}
+        <div
+          className="h-9 w-9 rounded-md flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: iconBg, color: iconColor }}
+        >
+          {icon}
+        </div>
+
+        {/* Meta */}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+          <p className="text-lg font-medium leading-tight">
+            {price !== "" && price != null
+              ? Number(price).toLocaleString()
+              : "—"}
+            <span className="text-sm font-normal text-muted-foreground ml-1.5">
+              {curr} {period}
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {durationDays !== "" && durationDays != null
+              ? `${durationDays} days`
+              : "— days"}
+          </p>
+        </div>
+
+        {/* Badge + chevron */}
+        {badge && (
+          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 mr-1 whitespace-nowrap">
+            {badge}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform duration-200 flex-shrink-0",
+            isOpen && "rotate-180",
+          )}
+        />
+      </button>
+
+      {/* Divider */}
+      {isOpen && <div className="h-px bg-border mx-4" />}
+
+      {/* Expandable fields */}
+      <div
+        className={cn(
+          "grid transition-all duration-200 ease-in-out",
+          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4 pt-3 grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">{`Price (${curr})`}</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="e.g. 199"
+                value={price}
+                onChange={(e) =>
+                  onPriceChange(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Duration (days)</Label>
+              <Input
+                type="number"
+                min={1}
+                placeholder="e.g. 30"
+                value={durationDays}
+                onChange={(e) =>
+                  onDaysChange(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Premium Settings Section ─────────────────────────────────────────────────
+
 const PremiumSettingsSection = () => {
   const { toast } = useToast();
-  const [premiumPrice, setPremiumPrice]               = useState<number | "">("");
-  const [durationDays, setDurationDays]               = useState<number | "">("");
-  const [currency, setCurrency]                       = useState("ETB");
-  const [telegramSupport, setTelegramSupport]         = useState("");
-  const [benefitsDescription, setBenefitsDescription] = useState("");
-  const [loaded, setLoaded]                           = useState(false);
 
-  const { isLoading } = useQuery<{ data: PremiumSettings }>({
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
+
+  const [monthlyPrice, setMonthlyPrice]                   = useState<number | "">("");
+  const [monthlyDurationDays, setMonthlyDurationDays]     = useState<number | "">("");
+  const [quarterlyPrice, setQuarterlyPrice]               = useState<number | "">("");
+  const [quarterlyDurationDays, setQuarterlyDurationDays] = useState<number | "">("");
+  const [annualPrice, setAnnualPrice]                     = useState<number | "">("");
+  const [annualDurationDays, setAnnualDurationDays]       = useState<number | "">("");
+  const [currency, setCurrency]                           = useState("ETB");
+  const [telegramSupport, setTelegramSupport]             = useState("");
+  const [benefitsDescription, setBenefitsDescription]     = useState("");
+  const [freeSubjectId, setFreeSubjectId]                 = useState<string>("");
+
+  // Fetch settings
+  const { data: settingsRaw, isLoading } = useQuery({
     queryKey: ["settings-premium"],
-    queryFn: ({ signal }) =>
-      apiClient.get<{ data: PremiumSettings }>("/settings/premium", signal),
-    onSuccess: (res: { data: PremiumSettings }) => {
-      if (!loaded && res?.data) {
-        const d = res.data;
-        setPremiumPrice(d.premiumPrice ?? "");
-        setDurationDays(d.durationDays ?? "");
-        setCurrency(d.currency ?? "ETB");
-        setTelegramSupport(d.telegramSupport ?? "");
-        setBenefitsDescription(d.benefitsDescription ?? "");
-        setLoaded(true);
-      }
+    queryFn: ({ signal }) => apiClient.get<any>("/settings/premium", signal),
+  });
+
+  // Fetch all subjects for the free subject picker
+  const { data: allSubjects = [] } = useQuery<{ id: string; name: string; streamId?: string }[]>({
+    queryKey: ["subjects-for-settings"],
+    queryFn: async ({ signal }) => {
+      const json = await apiClient.get<any>("/subjects", signal);
+      return Array.isArray(json) ? json : (json.data ?? []);
     },
-  } as any);
+  });
+
+  const dbSettings = settingsRaw?.data ?? settingsRaw ?? {};
+
+  useEffect(() => {
+    if (!isLoading && settingsRaw) {
+      const d = dbSettings;
+      // Support both old field names (premiumPrice/durationDays) and new per-plan names
+      setMonthlyPrice(d.monthlyPrice ?? d.premiumPrice ?? "");
+      setMonthlyDurationDays(d.monthlyDurationDays ?? d.durationDays ?? "");
+      setQuarterlyPrice(d.quarterlyPrice ?? "");
+      setQuarterlyDurationDays(d.quarterlyDurationDays ?? "");
+      setAnnualPrice(d.annualPrice ?? "");
+      setAnnualDurationDays(d.annualDurationDays ?? "");
+      setCurrency(d.currency ?? "ETB");
+      setTelegramSupport(d.telegramSupport ?? "");
+      setBenefitsDescription(d.benefitsDescription ?? "");
+      setFreeSubjectId(d.freeSubjectId ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, settingsRaw]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
       apiClient.put("/settings/premium", {
         data: {
-          premiumPrice: premiumPrice === "" ? null : Number(premiumPrice),
-          durationDays: durationDays === "" ? null : Number(durationDays),
+          monthlyPrice:          monthlyPrice          === "" ? null : Number(monthlyPrice),
+          monthlyDurationDays:   monthlyDurationDays   === "" ? null : Number(monthlyDurationDays),
+          quarterlyPrice:        quarterlyPrice        === "" ? null : Number(quarterlyPrice),
+          quarterlyDurationDays: quarterlyDurationDays === "" ? null : Number(quarterlyDurationDays),
+          annualPrice:           annualPrice           === "" ? null : Number(annualPrice),
+          annualDurationDays:    annualDurationDays    === "" ? null : Number(annualDurationDays),
           currency,
           telegramSupport,
           benefitsDescription,
+          freeSubjectId: freeSubjectId || null,
         },
       }),
     onSuccess: () => toast({ title: "Success", description: "Premium settings saved." }),
@@ -85,32 +264,110 @@ const PremiumSettingsSection = () => {
     );
   }
 
+  const selectedSubjectName = allSubjects.find((s) => s.id === freeSubjectId)?.name;
+
+  const plans = [
+    {
+      id:          "monthly",
+      label:       "Monthly",
+      icon:        <Calendar className="h-4 w-4" />,
+      period:      "/ mo",
+      badge:       undefined,
+      price:       monthlyPrice,
+      durationDays: monthlyDurationDays,
+      onPriceChange: setMonthlyPrice,
+      onDaysChange:  setMonthlyDurationDays,
+      iconBg:      "hsl(var(--muted))",
+      iconColor:   "hsl(var(--muted-foreground))",
+    },
+    {
+      id:          "quarterly",
+      label:       "Quarterly",
+      icon:        <BarChart2 className="h-4 w-4" />,
+      period:      "/ 3 mo",
+      badge:       undefined,
+      price:       quarterlyPrice,
+      durationDays: quarterlyDurationDays,
+      onPriceChange: setQuarterlyPrice,
+      onDaysChange:  setQuarterlyDurationDays,
+      iconBg:      "#eaf3de",
+      iconColor:   "#3b6d11",
+    },
+    {
+      id:          "annual",
+      label:       "Annual",
+      icon:        <Crown className="h-4 w-4" />,
+      period:      "/ yr",
+      badge:       "Best value",
+      price:       annualPrice,
+      durationDays: annualDurationDays,
+      onPriceChange: setAnnualPrice,
+      onDaysChange:  setAnnualDurationDays,
+      iconBg:      "#e6f1fb",
+      iconColor:   "#185fa5",
+    },
+  ];
+
   return (
-    <div className="bg-card rounded-lg border p-6 space-y-4">
+    <div className="bg-card rounded-lg border p-6 space-y-5">
       <h3 className="font-semibold">Premium Subscription Settings</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <Label htmlFor="sp-price">Premium Price (ETB)</Label>
-          <Input
-            id="sp-price"
-            type="number"
-            min={0}
-            placeholder="e.g. 199"
-            value={premiumPrice}
-            onChange={(e) => setPremiumPrice(e.target.value === "" ? "" : Number(e.target.value))}
+
+      {/* Live plan summary — read-only overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { label: "Monthly",   price: monthlyPrice,   days: monthlyDurationDays,   savings: 0 },
+          {
+            label: "Quarterly", price: quarterlyPrice, days: quarterlyDurationDays,
+            savings: (monthlyPrice && quarterlyPrice)
+              ? Math.round(100 - (Number(quarterlyPrice) / (Number(monthlyPrice) * 3)) * 100)
+              : 0,
+          },
+          {
+            label: "Annual",    price: annualPrice,    days: annualDurationDays,
+            savings: (monthlyPrice && annualPrice)
+              ? Math.round(100 - (Number(annualPrice) / (Number(monthlyPrice) * 12)) * 100)
+              : 0,
+            badge: "Best value",
+          },
+        ].map((p) => (
+          <div key={p.label} className="rounded-lg border bg-muted/30 p-3 text-center space-y-0.5">
+            <div className="flex items-center justify-center gap-1.5">
+              <p className="text-xs text-muted-foreground font-medium">{p.label}</p>
+              {p.badge && (
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                  {p.badge}
+                </span>
+              )}
+            </div>
+            <p className="text-xl font-bold text-primary">
+              {p.price !== "" && p.price != null ? Number(p.price).toLocaleString() : "—"}
+              <span className="text-xs font-normal text-muted-foreground ml-1">{currency}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {p.days !== "" && p.days != null ? `${p.days} days` : "— days"}
+            </p>
+            {p.savings > 0 && (
+              <p className="text-[11px] text-success font-medium">Save {p.savings}%</p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Plan accordion — click to edit */}
+      <div className="space-y-2">
+        {plans.map((plan) => (
+          <PlanAccordionItem
+            key={plan.id}
+            {...plan}
+            currency={currency}
+            isOpen={openPlan === plan.id}
+            onToggle={() => setOpenPlan(openPlan === plan.id ? null : plan.id)}
           />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="sp-duration">Subscription Duration (days)</Label>
-          <Input
-            id="sp-duration"
-            type="number"
-            min={1}
-            placeholder="e.g. 30"
-            value={durationDays}
-            onChange={(e) => setDurationDays(e.target.value === "" ? "" : Number(e.target.value))}
-          />
-        </div>
+        ))}
+      </div>
+
+      {/* Shared settings */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
         <div className="space-y-1">
           <Label htmlFor="sp-currency">Currency</Label>
           <Input
@@ -130,6 +387,38 @@ const PremiumSettingsSection = () => {
           />
         </div>
       </div>
+
+      {/* Free subject selector */}
+      <div className="space-y-1.5 rounded-lg border bg-muted/30 p-4">
+        <Label htmlFor="sp-free-subject" className="text-sm font-medium">
+          Free Subject (for non-premium users)
+        </Label>
+        <p className="text-xs text-muted-foreground pb-1">
+          Free users get full access to all questions and mock exams for this subject only.
+          All other subjects require a premium subscription.
+        </p>
+        <Select
+          value={freeSubjectId || "__none__"}
+          onValueChange={(v) => setFreeSubjectId(v === "__none__" ? "" : v)}
+        >
+          <SelectTrigger id="sp-free-subject">
+            <SelectValue placeholder="Select a free subject…">
+              {freeSubjectId
+                ? (selectedSubjectName ?? "Loading…")
+                : "None — all subjects require premium"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">None — all subjects require premium</SelectItem>
+            {allSubjects.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="space-y-1">
         <Label htmlFor="sp-benefits">Premium Benefits Description</Label>
         <Textarea
@@ -140,6 +429,7 @@ const PremiumSettingsSection = () => {
           onChange={(e) => setBenefitsDescription(e.target.value)}
         />
       </div>
+
       <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
         {saveMutation.isPending ? "Saving..." : "Save Premium Settings"}
       </Button>
@@ -147,49 +437,32 @@ const PremiumSettingsSection = () => {
   );
 };
 
+// ─── Settings Page ─────────────────────────────────────────────────────────────
+
 const SettingsPage = () => {
   const { toast } = useToast();
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [aiScanner, setAiScanner] = useState(true);
 
-  // ── Feature toggles — from backend
-  const [mockExams, setMockExams] = useState(false);
-  const [shortAnswer, setShortAnswer] = useState(false);
-  const [contentModeration, setContentModeration] = useState(false);
-
-  // ── Milestone notification — from backend
-  const [userMilestones, setUserMilestones] = useState(false);
-  const [milestoneLoading, setMilestoneLoading] = useState(false);
-
-  // ── Other notification toggles — local only
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [dailyReports, setDailyReports] = useState(true);
-  const [paymentAlerts, setPaymentAlerts] = useState(true);
-
-  const [admins, setAdmins] = useState<any[]>([]);
+  const [admins, setAdmins]               = useState<any[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState(false);
 
-  // Add Admin dialog state
-  const [addAdminOpen, setAddAdminOpen] = useState(false);
-  const [adminName, setAdminName] = useState("");
-  const [adminPhone, setAdminPhone] = useState("+251");
-  const [adminEmail, setAdminEmail] = useState("");
+  const [addAdminOpen, setAddAdminOpen]   = useState(false);
+  const [adminName, setAdminName]         = useState("");
+  const [adminPhone, setAdminPhone]       = useState("+251");
+  const [adminEmail, setAdminEmail]       = useState("");
   const [adminPassword, setAdminPassword] = useState("");
-  const [adminRole, setAdminRole] = useState("admin");
-  const [showPassword, setShowPassword] = useState(false);
-  const [addLoading, setAddLoading] = useState(false);
-  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
+  const [adminRole, setAdminRole]         = useState("admin");
+  const [showPassword, setShowPassword]   = useState(false);
+  const [addLoading, setAddLoading]       = useState(false);
+  const [formErrors, setFormErrors]       = useState<Record<string, boolean>>({});
 
-  // ── Fetch admins
   useEffect(() => {
     const fetchAdmins = async () => {
       setLoadingAdmins(true);
       try {
         const json = await apiClient.get<any>("/accounts/get-accounts");
-        const adminList = (json?.data || []).filter(
-          (u: any) => u.type !== "student",
-        );
+        const adminList = (json?.data || []).filter((u: any) => u.type !== "student");
         setAdmins(adminList);
       } catch {
         // Failed to fetch admins
@@ -199,90 +472,6 @@ const SettingsPage = () => {
     };
     fetchAdmins();
   }, []);
-
-  // ── Fetch feature toggles on mount
-  useEffect(() => {
-    const fetchToggles = async () => {
-      try {
-        const json = await apiClient.get<any>("/admin/feature-toggles/status");
-        setMockExams(json.mockExams ?? false);
-        setShortAnswer(json.shortAnswerQuestions ?? false);
-        setContentModeration(json.contentModeration ?? false);
-      } catch {
-        // Endpoint may not exist on this deployment — silently ignore
-      }
-    };
-    fetchToggles();
-  }, []);
-
-  // ── Fetch milestone notification status on mount
-  useEffect(() => {
-    const fetchMilestoneStatus = async () => {
-      try {
-        const json = await apiClient.get<any>("/notifications/admin/milestone-notifications/status");
-        setUserMilestones(json.isEnabled ?? false);
-      } catch {
-        // Endpoint may not exist on this deployment — silently ignore
-      }
-    };
-    fetchMilestoneStatus();
-  }, []);
-
-  // ── Toggle feature handler
-  const handleToggleFeature = async (
-    feature: "mockExams" | "shortAnswerQuestions" | "contentModeration",
-    newValue: boolean,
-    setter: (v: boolean) => void,
-  ) => {
-    setter(newValue); // optimistic
-    try {
-      const json = await apiClient.post<any>("/admin/feature-toggles/toggle", {
-        feature,
-        isEnabled: newValue,
-      });
-      setMockExams(json.mockExams ?? false);
-      setShortAnswer(json.shortAnswerQuestions ?? false);
-      setContentModeration(json.contentModeration ?? false);
-      toast({
-        title: "Updated",
-        description: `Feature ${newValue ? "enabled" : "disabled"} successfully.`,
-      });
-    } catch {
-      setter(!newValue); // revert
-      toast({
-        title: "Error",
-        description: "Failed to update feature. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // ── Toggle milestone notification handler
-  const handleToggleMilestone = async (newValue: boolean) => {
-    setUserMilestones(newValue); // optimistic
-    setMilestoneLoading(true);
-    try {
-      const json = await apiClient.post<any>(
-        "/notifications/admin/milestone-notifications/toggle",
-      );
-      setUserMilestones(json.isEnabled ?? newValue);
-      toast({
-        title: "Updated",
-        description:
-          json.message ||
-          `Milestone notifications ${json.isEnabled ? "enabled" : "disabled"}.`,
-      });
-    } catch {
-      setUserMilestones(!newValue); // revert
-      toast({
-        title: "Error",
-        description: "Failed to update milestone notifications.",
-        variant: "destructive",
-      });
-    } finally {
-      setMilestoneLoading(false);
-    }
-  };
 
   const handleSave = () => {
     toast({
@@ -305,8 +494,7 @@ const SettingsPage = () => {
     const errors: Record<string, boolean> = {};
     if (!adminName.trim()) errors.name = true;
     if (!adminPhone.trim() || adminPhone === "+251") errors.phone = true;
-    if (!adminPassword.trim() || adminPassword.length < 8)
-      errors.password = true;
+    if (!adminPassword.trim() || adminPassword.length < 8) errors.password = true;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -335,7 +523,6 @@ const SettingsPage = () => {
         description: `${adminName} has been added as an admin successfully.`,
       });
 
-      // Update state locally
       setAdmins((prev) => [data, ...prev]);
       setAddAdminOpen(false);
       resetAddAdminForm();
@@ -355,10 +542,7 @@ const SettingsPage = () => {
       <Tabs defaultValue="general">
         <TabsList className="mb-6 flex-wrap h-auto">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="content">Content</TabsTrigger>
-          <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="roles">Admin Roles</TabsTrigger>
         </TabsList>
 
@@ -388,114 +572,8 @@ const SettingsPage = () => {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {maintenanceMode && (
-                  <AlertTriangle className="h-4 w-4 text-warning" />
-                )}
-                <Switch
-                  checked={maintenanceMode}
-                  onCheckedChange={setMaintenanceMode}
-                />
-              </div>
-            </div>
-            <Button onClick={handleSave}>Save Changes</Button>
-          </div>
-        </TabsContent>
-
-        {/* Content */}
-        <TabsContent value="content" className="space-y-6">
-          <div className="bg-card rounded-lg border p-6 space-y-4">
-            <h3 className="font-semibold">Feature Toggles</h3>
-            {[
-              {
-                label: "Enable AI Scanner",
-                desc: "Allow users to scan questions using camera",
-                state: aiScanner,
-                set: setAiScanner,
-                feature: null,
-              },
-              {
-                label: "Enable Mock Exams",
-                desc: "Enable timed mock exam functionality",
-                state: mockExams,
-                set: setMockExams,
-                feature: "mockExams" as const,
-              },
-              {
-                label: "Enable Short Answer Questions",
-                desc: "Allow open-ended question types",
-                state: shortAnswer,
-                set: setShortAnswer,
-                feature: "shortAnswerQuestions" as const,
-              },
-              {
-                label: "Content Moderation",
-                desc: "Auto-review user-generated content",
-                state: contentModeration,
-                set: setContentModeration,
-                feature: "contentModeration" as const,
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="flex items-center justify-between p-4 bg-muted rounded-lg"
-              >
-                <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
-                </div>
-                <Switch
-                  checked={item.state}
-                  onCheckedChange={(v) => {
-                    if (item.feature) {
-                      handleToggleFeature(item.feature, v, item.set);
-                    } else {
-                      item.set(v);
-                    }
-                  }}
-                />
-              </div>
-            ))}
-            <Button onClick={handleSave}>Save Changes</Button>
-          </div>
-        </TabsContent>
-
-        {/* AI */}
-        <TabsContent value="ai" className="space-y-6">
-          <div className="bg-card rounded-lg border p-6 space-y-4">
-            <h3 className="font-semibold">AI Configuration</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label>Free User Daily Limit</Label>
-                <Input type="number" defaultValue="10" />
-              </div>
-              <div>
-                <Label>Premium User Daily Limit</Label>
-                <Input defaultValue="Unlimited" />
-              </div>
-              <div>
-                <Label>Primary Model</Label>
-                <Select defaultValue="mistral">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mistral">Mistral 7B</SelectItem>
-                    <SelectItem value="llama">Llama 3</SelectItem>
-                    <SelectItem value="gpt4">GPT-4</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>OCR Model</Label>
-                <Select defaultValue="paddle">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="paddle">PaddleOCR</SelectItem>
-                    <SelectItem value="tesseract">Tesseract</SelectItem>
-                  </SelectContent>
-                </Select>
+                {maintenanceMode && <AlertTriangle className="h-4 w-4 text-warning" />}
+                <Switch checked={maintenanceMode} onCheckedChange={setMaintenanceMode} />
               </div>
             </div>
             <Button onClick={handleSave}>Save Changes</Button>
@@ -504,64 +582,7 @@ const SettingsPage = () => {
 
         {/* Payments */}
         <TabsContent value="payments" className="space-y-6">
-        
           <PremiumSettingsSection />
-        </TabsContent>
-
-        {/* Notifications */}
-        <TabsContent value="notifications" className="space-y-6">
-          <div className="bg-card rounded-lg border p-6 space-y-4">
-            <h3 className="font-semibold">Notification Settings</h3>
-            {/* Local-only toggles */}
-            {[
-              {
-                label: "Email Notifications",
-                desc: "Receive email alerts for important events",
-                state: emailNotifications,
-                set: setEmailNotifications,
-              },
-              {
-                label: "Daily Reports",
-                desc: "Get daily summary emails",
-                state: dailyReports,
-                set: setDailyReports,
-              },
-              {
-                label: "Payment Alerts",
-                desc: "Notify on failed payments",
-                state: paymentAlerts,
-                set: setPaymentAlerts,
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="flex items-center justify-between p-4 bg-muted rounded-lg"
-              >
-                <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
-                </div>
-                <Switch checked={item.state} onCheckedChange={item.set} />
-              </div>
-            ))}
-
-            {/* User Milestones — connected to backend */}
-            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-              <div>
-                <p className="text-sm font-medium">User Milestones</p>
-                <p className="text-xs text-muted-foreground">
-                  Alert when users hit 1000 questions
-                </p>
-              </div>
-              <Switch
-                checked={userMilestones}
-                disabled={milestoneLoading}
-                onCheckedChange={handleToggleMilestone}
-              />
-            </div>
-
-            <Button onClick={handleSave}>Save Changes</Button>
-          </div>
         </TabsContent>
 
         {/* Admin Roles */}
@@ -582,46 +603,28 @@ const SettingsPage = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="p-3 text-left font-medium text-muted-foreground">
-                    Name
-                  </th>
-                  <th className="p-3 text-left font-medium text-muted-foreground">
-                    Email
-                  </th>
-                  <th className="p-3 text-left font-medium text-muted-foreground">
-                    Role
-                  </th>
-                  <th className="p-3 text-left font-medium text-muted-foreground">
-                    Last Login
-                  </th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">Name</th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">Email</th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">Role</th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">Last Login</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingAdmins ? (
                   <tr>
-                    <td colSpan={4} className="p-6 text-center">
-                      Loading...
-                    </td>
+                    <td colSpan={4} className="p-6 text-center">Loading...</td>
                   </tr>
                 ) : admins.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={4}
-                      className="p-6 text-center text-muted-foreground"
-                    >
+                    <td colSpan={4} className="p-6 text-center text-muted-foreground">
                       No admins found
                     </td>
                   </tr>
                 ) : (
                   admins.map((admin) => (
-                    <tr
-                      key={admin.id}
-                      className="border-b hover:bg-muted/30 transition-colors"
-                    >
+                    <tr key={admin.id} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="p-3 font-medium">{admin.name}</td>
-                      <td className="p-3 text-muted-foreground">
-                        {admin.email}
-                      </td>
+                      <td className="p-3 text-muted-foreground">{admin.email}</td>
                       <td className="p-3">
                         <Badge variant="outline">{admin.type}</Badge>
                       </td>
@@ -663,9 +666,7 @@ const SettingsPage = () => {
                 className={formErrors.name ? "border-destructive" : ""}
               />
               {formErrors.name && (
-                <p className="text-xs text-destructive mt-1">
-                  Name is required
-                </p>
+                <p className="text-xs text-destructive mt-1">Name is required</p>
               )}
             </div>
             <div>
@@ -694,9 +695,7 @@ const SettingsPage = () => {
             <div>
               <Label>
                 Email{" "}
-                <span className="text-muted-foreground text-xs">
-                  (optional)
-                </span>
+                <span className="text-muted-foreground text-xs">(optional)</span>
               </Label>
               <Input
                 type="email"
@@ -714,9 +713,7 @@ const SettingsPage = () => {
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="super_admin">Super Admin</SelectItem>
-                  <SelectItem value="content_manager">
-                    Content Manager
-                  </SelectItem>
+                  <SelectItem value="content_manager">Content Manager</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -735,11 +732,7 @@ const SettingsPage = () => {
                   onClick={() => setShowPassword((p) => !p)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
               {formErrors.password && (

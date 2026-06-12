@@ -1,11 +1,8 @@
 import { useState } from "react";
-import { DollarSign, Crown, Search, Loader2 } from "lucide-react";
-import KPICard from "@/components/KPICard";
+import { Crown, Search, Loader2, TrendingUp, Users, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -31,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart,
@@ -40,31 +38,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
   Cell,
-  Legend,
 } from "recharts";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/services/api/client";
 import { useToast } from "@/hooks/use-toast";
-import { revenueData } from "@/data/mockData";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PIE_COLORS = [
-  "hsl(224,76%,33%)",
-  "hsl(173,58%,39%)",
-  "hsl(24,95%,53%)",
-  "hsl(38,92%,50%)",
-];
-
-const paymentBreakdown = [
-  { name: "Telebirr", value: 28456 },
-  { name: "CBE Birr", value: 12345 },
-  { name: "M-Pesa",   value: 4877  },
-];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,14 +55,6 @@ type PremiumUser = {
   premiumEndDate: string | null;
   isActive: boolean;
   status: "Active" | "Expired";
-};
-
-type PremiumSettings = {
-  premiumPrice?: number;
-  durationDays?: number;
-  currency?: string;
-  telegramSupport?: string;
-  benefitsDescription?: string;
 };
 
 const formatDate = (d: string | null) => {
@@ -319,114 +289,80 @@ const PremiumSubscriptionsTab = () => {
   );
 };
 
-// ─── Premium Settings Tab ─────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
-const PremiumSettingsTab = () => {
-  const { toast } = useToast();
+// ─── Charts ────────────────────────────────────────────────────────────────────
 
-  const [premiumPrice, setPremiumPrice]               = useState<number | "">("");
-  const [durationDays, setDurationDays]               = useState<number | "">("");
-  const [currency, setCurrency]                       = useState("ETB");
-  const [telegramSupport, setTelegramSupport]         = useState("");
-  const [benefitsDescription, setBenefitsDescription] = useState("");
-  const [loaded, setLoaded]                           = useState(false);
+const CHART_COLORS = {
+  active: "#22c55e",
+  expired: "#ef4444",
+  monthly: "#6366f1",
+  quarterly: "#f59e0b",
+  annual: "#10b981",
+};
 
-  const { isLoading } = useQuery<{ data: PremiumSettings }>({
-    queryKey: ["settings-premium"],
-    queryFn: ({ signal }) =>
-      apiClient.get<{ data: PremiumSettings }>("/settings/premium", signal),
-    onSuccess: (res: { data: PremiumSettings }) => {
-      if (!loaded && res?.data) {
-        const d = res.data;
-        setPremiumPrice(d.premiumPrice ?? "");
-        setDurationDays(d.durationDays ?? "");
-        setCurrency(d.currency ?? "ETB");
-        setTelegramSupport(d.telegramSupport ?? "");
-        setBenefitsDescription(d.benefitsDescription ?? "");
-        setLoaded(true);
-      }
-    },
-  } as any);
+type ChartEntry = { name: string; value: number; fill: string };
 
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      apiClient.put("/settings/premium", {
-        data: {
-          premiumPrice: premiumPrice === "" ? null : Number(premiumPrice),
-          durationDays: durationDays === "" ? null : Number(durationDays),
-          currency,
-          telegramSupport,
-          benefitsDescription,
-        },
-      }),
-    onSuccess: () => toast({ title: "Success", description: "Premium settings saved." }),
-    onError: () =>
-      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" }),
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
+const StatusBarChart = ({ active, expired }: { active: number; expired: number }) => {
+  const data: ChartEntry[] = [
+    { name: "Active", value: active, fill: CHART_COLORS.active },
+    { name: "Expired", value: expired, fill: CHART_COLORS.expired },
+  ];
   return (
-    <div className="max-w-lg space-y-5 pt-2">
-      <div className="space-y-1">
-        <Label htmlFor="premiumPrice">Premium Price (ETB)</Label>
-        <Input
-          id="premiumPrice"
-          type="number"
-          min={0}
-          placeholder="e.g. 199"
-          value={premiumPrice}
-          onChange={(e) => setPremiumPrice(e.target.value === "" ? "" : Number(e.target.value))}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="durationDays">Subscription Duration (days)</Label>
-        <Input
-          id="durationDays"
-          type="number"
-          min={1}
-          placeholder="e.g. 30"
-          value={durationDays}
-          onChange={(e) => setDurationDays(e.target.value === "" ? "" : Number(e.target.value))}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="currency">Currency</Label>
-        <Input
-          id="currency"
-          placeholder="ETB"
-          value={currency}
-          onChange={(e) => setCurrency(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="telegramSupport">Telegram Support Link</Label>
-        <Input
-          id="telegramSupport"
-          placeholder="@LearnovaSupport"
-          value={telegramSupport}
-          onChange={(e) => setTelegramSupport(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="benefitsDescription">Premium Benefits Description</Label>
-        <Textarea
-          id="benefitsDescription"
-          placeholder="Describe the benefits of premium..."
-          rows={4}
-          value={benefitsDescription}
-          onChange={(e) => setBenefitsDescription(e.target.value)}
-        />
-      </div>
-      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-        {saveMutation.isPending ? "Saving..." : "Save Settings"}
-      </Button>
+    <div className="rounded-lg border bg-card p-5 shadow-sm space-y-3">
+      <p className="text-sm font-medium">Subscription Status</p>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={data} barCategoryGap="40%">
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+          <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+          <Tooltip
+            contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+            cursor={{ fill: "hsl(var(--muted))" }}
+          />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+            {data.map((entry) => (
+              <Cell key={entry.name} fill={entry.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+const PlanBreakdownChart = ({ planCounts }: { planCounts: Record<string, number> }) => {
+  const data: ChartEntry[] = [
+    { name: "Monthly", value: planCounts["monthly"] ?? planCounts["Monthly"] ?? 0, fill: CHART_COLORS.monthly },
+    { name: "Quarterly", value: planCounts["quarterly"] ?? planCounts["Quarterly"] ?? 0, fill: CHART_COLORS.quarterly },
+    { name: "Annual", value: planCounts["annual"] ?? planCounts["Annual"] ?? 0, fill: CHART_COLORS.annual },
+  ];
+  const hasData = data.some((d) => d.value > 0);
+  return (
+    <div className="rounded-lg border bg-card p-5 shadow-sm space-y-3">
+      <p className="text-sm font-medium">Subscribers by Plan</p>
+      {hasData ? (
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={data} barCategoryGap="40%">
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+              cursor={{ fill: "hsl(var(--muted))" }}
+            />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              {data.map((entry) => (
+                <Cell key={entry.name} fill={entry.fill} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="h-[160px] flex items-center justify-center text-sm text-muted-foreground">
+          No plan data available
+        </div>
+      )}
     </div>
   );
 };
@@ -434,63 +370,94 @@ const PremiumSettingsTab = () => {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const PaymentsPage = () => {
-  const isMobile = useIsMobile();
+  // Fetch premium users for real stats
+  const { data: premiumUsersRaw = [] } = useQuery<any[]>({
+    queryKey: ["premium-users"],
+    queryFn: async ({ signal }) => {
+      const payload = await apiClient.get<any>("/accounts/premium-users", signal);
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.data)) return payload.data;
+      return [];
+    },
+  });
+
+  // Fetch premium settings for price info
+  const { data: settingsRaw } = useQuery({
+    queryKey: ["settings-premium"],
+    queryFn: ({ signal }) => apiClient.get<any>("/settings/premium", signal),
+  });
+
+  const settings = settingsRaw?.data ?? settingsRaw ?? {};
+  const currency = settings.currency ?? "ETB";
+  // Support both old field name (premiumPrice) and new (monthlyPrice)
+  const monthlyPrice = Number(settings.monthlyPrice ?? settings.premiumPrice ?? 0);
+
+  const now = new Date();
+  const activeCount  = premiumUsersRaw.filter((u) =>
+    u.premiumEndDate ? new Date(u.premiumEndDate) > now : true,
+  ).length;
+  const expiredCount = premiumUsersRaw.length - activeCount;
+
+  // Estimated revenue: sum per user based on plan multiplier
+  const PLAN_MULTIPLIERS: Record<string, number> = {
+    monthly: 1, Monthly: 1,
+    quarterly: 3, Quarterly: 3,
+    annual: 12, Annual: 12,
+  };
+  const totalRevenue = premiumUsersRaw.reduce((sum, u) => {
+    const mult = PLAN_MULTIPLIERS[u.premiumPlan ?? ""] ?? 1;
+    return sum + monthlyPrice * mult;
+  }, 0);
+
+  // Count by plan
+  const planCounts: Record<string, number> = {};
+  for (const u of premiumUsersRaw) {
+    const plan = u.premiumPlan ?? "Unknown";
+    planCounts[plan] = (planCounts[plan] ?? 0) + 1;
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <KPICard title="Total Revenue"   value="245,890 ETB" trend={18} icon={DollarSign} />
-        <KPICard title="Today Revenue"   value="1,845 ETB"   trend={6}  icon={DollarSign} />
-        <KPICard title="Monthly Revenue" value="45,678 ETB"  trend={21} icon={DollarSign} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border bg-card p-5 shadow-sm space-y-1">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-success" />
+            <p className="text-xs text-muted-foreground">Active Subscribers</p>
+          </div>
+          <p className="text-3xl font-bold text-success">{activeCount}</p>
+          <p className="text-xs text-muted-foreground">currently active premium</p>
+        </div>
+        <div className="rounded-lg border bg-card p-5 shadow-sm space-y-1">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Total Subscribers</p>
+          </div>
+          <p className="text-3xl font-bold">{premiumUsersRaw.length}</p>
+          <p className="text-xs text-muted-foreground">{expiredCount} expired</p>
+        </div>
+        <div className="rounded-lg border bg-card p-5 shadow-sm space-y-1">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-primary" />
+            <p className="text-xs text-muted-foreground">Estimated Revenue</p>
+          </div>
+          <p className="text-3xl font-bold text-primary">
+            {totalRevenue > 0 ? `${totalRevenue.toLocaleString()} ${currency}` : "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            based on {monthlyPrice} {currency}/month
+          </p>
+        </div>
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
-        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6 lg:col-span-2">
-          <h3 className="mb-4 font-semibold text-card-foreground">Revenue (Last 12 Months)</h3>
-          <ResponsiveContainer width="100%" height={isMobile ? 220 : 300}>
-            <BarChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,32%,91%)" />
-              <XAxis
-                dataKey="month"
-                tick={{ fontSize: isMobile ? 10 : 12 }}
-                interval={0}
-                tickFormatter={(value: string) => value.slice(0, 3)}
-              />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="revenue" fill="hsl(224,76%,33%)" radius={[4, 4, 0, 0]} name="Revenue" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm sm:p-6">
-          <h3 className="mb-4 font-semibold text-card-foreground">Payment Methods</h3>
-          <ResponsiveContainer width="100%" height={isMobile ? 220 : 260}>
-            <PieChart>
-              <Pie
-                data={paymentBreakdown}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={85}
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {paymentBreakdown.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip formatter={(v) => `${Number(v).toLocaleString()} ETB`} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatusBarChart active={activeCount} expired={expiredCount} />
+        <PlanBreakdownChart planCounts={planCounts} />
       </div>
 
-      {/* Tabs: Premium Subscriptions only */}
+      {/* Subscriptions Table */}
       <Tabs defaultValue="premium">
         <TabsList>
           <TabsTrigger value="premium">
@@ -498,8 +465,6 @@ const PaymentsPage = () => {
             Premium Subscriptions
           </TabsTrigger>
         </TabsList>
-
-        {/* ── Premium Subscriptions ── */}
         <TabsContent value="premium" className="mt-4">
           <PremiumSubscriptionsTab />
         </TabsContent>

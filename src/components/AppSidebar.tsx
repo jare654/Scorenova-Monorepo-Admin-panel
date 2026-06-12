@@ -10,6 +10,8 @@ import {
   BookOpen,
   Dumbbell,
   Crown,
+  BellRing,
+  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,8 +29,10 @@ const navItems = [
   // { title: "Practice",     path: "/practice",    icon: Dumbbell },
   { title: "Students",     path: "/users",       icon: Users },
   { title: "Payments",     path: "/payments",    icon: CreditCard },
-  { title: "Analytics",    path: "/analytics",   icon: BarChart3 },
-  { title: "Settings",     path: "/settings",    icon: Settings },
+  { title: "Analytics",    path: "/analytics",          icon: BarChart3 },
+  { title: "Reports",      path: "/reports",             icon: Flag },
+  { title: "Settings",     path: "/settings",            icon: Settings },
+  { title: "Notif. Test",  path: "/notification-test",   icon: BellRing },
 ];
 
 interface AppSidebarProps {

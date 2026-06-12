@@ -18,7 +18,7 @@ const DEFAULT_TIMEOUT_MS = 15000;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const retryStatuses = new Set([429, 502, 503, 504]);
-const GET_CACHE_TTL_MS = 30 * 1000;
+const GET_CACHE_TTL_MS = 0; // No cache — rely on TanStack Query's staleTime instead
 const GET_MIN_INTERVAL_MS = 2000;
 const GET_COOLDOWN_ON_429_MS = 10000;
 
