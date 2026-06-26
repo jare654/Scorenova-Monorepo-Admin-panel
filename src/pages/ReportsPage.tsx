@@ -191,6 +191,9 @@ const ReportsPage = () => {
             <SelectItem value="app_crashes">App Crashes</SelectItem>
             <SelectItem value="wrong_answer">Wrong Answer</SelectItem>
             <SelectItem value="subscription_issue">Subscription Issue</SelectItem>
+            <SelectItem value="bug">Bug</SelectItem>
+            <SelectItem value="question_issue">Question Issue</SelectItem>
+            <SelectItem value="content">Content</SelectItem>
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>

@@ -167,8 +167,8 @@ const UsersPage = () => {
     onSuccess:  (_, userId) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       if (selectedUser?.id === userId) {
-        const newStatus = selectedUser.status === "premium" ? "free" : "premium";
-        setSelectedUser({ ...selectedUser, status: newStatus });
+        const newIsPremium = !selectedUser.isPremium;
+        setSelectedUser({ ...selectedUser, isPremium: newIsPremium });
       }
       toast({ title: "Success", description: "Premium status toggled successfully." });
     },
@@ -585,7 +585,7 @@ const UsersPage = () => {
             {/* Premium Status */}
             <div className="bg-muted rounded-lg p-3 space-y-1">
               <p className="text-muted-foreground text-xs font-medium">Premium Status</p>
-              {selectedUser.status === "premium" && selectedUser.premiumEndDate && new Date(selectedUser.premiumEndDate) > new Date() ? (
+              {selectedUser.isPremium && selectedUser.premiumEndDate && new Date(selectedUser.premiumEndDate) > new Date() ? (
                 <div className="flex flex-col gap-1">
                   <Badge variant="outline" className="bg-success/10 text-success border-success/20 w-fit">
                     Premium Active
@@ -597,7 +597,7 @@ const UsersPage = () => {
                     <p className="text-xs text-muted-foreground">Plan: {selectedUser.premiumPlan}</p>
                   )}
                 </div>
-              ) : selectedUser.status === "premium" && selectedUser.premiumEndDate && new Date(selectedUser.premiumEndDate) <= new Date() ? (
+              ) : selectedUser.isPremium && selectedUser.premiumEndDate && new Date(selectedUser.premiumEndDate) <= new Date() ? (
                 <div className="flex flex-col gap-1">
                   <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 w-fit">
                     Premium Expired
@@ -605,6 +605,15 @@ const UsersPage = () => {
                   <p className="text-xs text-muted-foreground">
                     Expired: {new Date(selectedUser.premiumEndDate).toLocaleDateString()}
                   </p>
+                </div>
+              ) : selectedUser.isPremium ? (
+                <div className="flex flex-col gap-1">
+                  <Badge variant="outline" className="bg-success/10 text-success border-success/20 w-fit">
+                    Premium Active
+                  </Badge>
+                  {selectedUser.premiumPlan && (
+                    <p className="text-xs text-muted-foreground">Plan: {selectedUser.premiumPlan}</p>
+                  )}
                 </div>
               ) : (
                 <Badge variant="outline" className="bg-muted text-muted-foreground w-fit">
@@ -703,7 +712,7 @@ const UsersPage = () => {
                 size="sm"
                 className="text-xs w-full"
                 onClick={() => {
-                  if (selectedUser.status === "premium") {
+                  if (selectedUser.isPremium) {
                     togglePremiumMutation.mutate(selectedUser.id);
                   } else {
                     setGrantPremiumDialogOpen(true);
@@ -714,7 +723,7 @@ const UsersPage = () => {
                 <Crown className="h-3 w-3 mr-1" />
                 {actionLoading === "premium"
                   ? "Updating..."
-                  : selectedUser.status === "premium"
+                  : selectedUser.isPremium
                     ? "Revoke Premium"
                     : "Grant Premium"}
               </Button>

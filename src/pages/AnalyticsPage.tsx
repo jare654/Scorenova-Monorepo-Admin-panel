@@ -188,7 +188,11 @@ const AnalyticsPage = () => {
     queryFn: () =>
       apiClient
         .get<any>("/questions/flags?limit=50")
-        .then((res) => unwrap<any>(res)),
+        .then((res) => {
+          // Normalize: could be { data: [...] } or array directly
+          const arr = res?.data ?? res;
+          return Array.isArray(arr) ? arr : [];
+        }),
     enabled: !!token,
     staleTime: 30_000,
   });
@@ -196,7 +200,11 @@ const AnalyticsPage = () => {
   const { data: reportsData, isLoading: reportsLoading } = useQuery({
     queryKey: ["analytics-reports"],
     queryFn: () =>
-      apiClient.get<any>("/reports?limit=50").then((res) => unwrap<any>(res)),
+      apiClient.get<any>("/reports?limit=50").then((res) => {
+        // Normalize: { data: [...], total } → extract the array
+        const arr = res?.data ?? res;
+        return Array.isArray(arr) ? arr : [];
+      }),
     enabled: !!token,
     staleTime: 30_000,
   });
