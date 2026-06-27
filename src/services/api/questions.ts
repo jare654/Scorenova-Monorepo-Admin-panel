@@ -345,9 +345,13 @@ export async function bulkUploadQuestions(
 ): Promise<BulkUploadResult> {
   const formData = new FormData();
   formData.append("file", file);
+  // Large CSV files (4,000+ rows) can take several minutes on the server.
+  // Use a 10-minute timeout so the request isn't aborted mid-processing.
   const payload = await apiClient.post<unknown>(
     "/questions/bulk-upload",
     formData,
+    undefined,
+    { timeoutMs: 10 * 60 * 1000, retries: 0 },
   );
   return normalizeSingle<BulkUploadResult>(payload);
 }

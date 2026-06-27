@@ -196,7 +196,19 @@ const UploadModal = ({ open, onClose, onSuccess, subjects, streamNameById }: Upl
 
         {/* Drop zone */}
         {!result && (
-          <div
+          <>
+            {loading && (
+              <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 flex items-start gap-2">
+                <Loader2 className="h-4 w-4 text-warning animate-spin shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-warning">Processing your file…</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Large files (4,000+ rows) can take a few minutes. Please keep this window open.
+                  </p>
+                </div>
+              </div>
+            )}
+            <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
@@ -236,6 +248,7 @@ const UploadModal = ({ open, onClose, onSuccess, subjects, streamNameById }: Upl
               </div>
             )}
           </div>
+          </>
         )}
 
         {/* Result summary */}
@@ -284,13 +297,13 @@ const UploadModal = ({ open, onClose, onSuccess, subjects, streamNameById }: Upl
         )}
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={loading}>
             {result ? "Close" : "Cancel"}
           </Button>
           {!result && (
             <Button onClick={handleUpload} disabled={!file || loading}>
               {loading ? (
-                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Uploading…</>
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Processing… (may take a few minutes)</>
               ) : (
                 <><Upload className="h-4 w-4 mr-1" />Upload</>
               )}
