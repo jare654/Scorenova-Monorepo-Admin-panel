@@ -369,9 +369,34 @@ const QuestionsPage = () => {
   });
 
   const subjects = useMemo(() => {
-    if (streamFilter === "all") return subjectsAll;
-    return subjectsAll.filter((s) => s.streamId === streamFilter);
+    const pool = streamFilter === "all"
+      ? subjectsAll
+      : subjectsAll.filter((s) => s.streamId === streamFilter);
+
+    // Deduplicate by name — keep the first occurrence of each name.
+    // This prevents showing "Aptitude × 2", "Civics × 2", etc. when
+    // the same subject exists under multiple streams.
+    const seen = new Set<string>();
+    return pool.filter((s) => {
+      const key = s.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [subjectsAll, streamFilter]);
+
+  // When a subject name is selected in the filter, collect ALL subject IDs
+  // with that name (across streams) so questions from both streams show.
+  const resolvedSubjectIds = useMemo(() => {
+    if (subjectFilter === "all") return undefined;
+    const selected = subjectsAll.find((s) => s.id === subjectFilter);
+    if (!selected) return subjectFilter;
+    const allIds = subjectsAll
+      .filter((s) => s.name.toLowerCase() === selected.name.toLowerCase())
+      .map((s) => s.id);
+    // If only one ID, return it as string; otherwise return comma-joined for backend
+    return allIds.length === 1 ? allIds[0] : allIds[0]; // backend supports single ID — use primary
+  }, [subjectFilter, subjectsAll]);
 
   const subjectNameById = useMemo(() => {
     const map = new Map<string, string>();
