@@ -391,11 +391,11 @@ const QuestionsPage = () => {
     if (subjectFilter === "all") return undefined;
     const selected = subjectsAll.find((s) => s.id === subjectFilter);
     if (!selected) return subjectFilter;
+    // Find all subjects with the same name (e.g. Aptitude in both streams)
     const allIds = subjectsAll
       .filter((s) => s.name.toLowerCase() === selected.name.toLowerCase())
       .map((s) => s.id);
-    // If only one ID, return it as string; otherwise return comma-joined for backend
-    return allIds.length === 1 ? allIds[0] : allIds[0]; // backend supports single ID — use primary
+    return allIds.join(","); // comma-separated for backend
   }, [subjectFilter, subjectsAll]);
 
   const subjectNameById = useMemo(() => {
@@ -423,12 +423,12 @@ const QuestionsPage = () => {
   const { data: questionsData, isLoading: loading } = useQuery<
     { data: Question[]; total: number; totalPages: number }, Error
   >({
-    queryKey: ["questions", page, streamFilter, subjectFilter, difficultyFilter, debouncedSearch],
+    queryKey: ["questions", page, streamFilter, subjectFilter, resolvedSubjectIds, difficultyFilter, debouncedSearch],
     queryFn: ({ signal }) =>
       fetchQuestions({
         page, limit: perPage,
         streamId:   streamFilter === "all" ? undefined : streamFilter,
-        subjectId:  subjectFilter === "all" ? undefined : subjectFilter,
+        subjectId:  resolvedSubjectIds,
         difficulty: difficultyFilter === "all" ? undefined : difficultyFilter,
         search:     debouncedSearch.trim() || undefined,
       }, signal),
