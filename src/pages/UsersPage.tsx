@@ -128,7 +128,7 @@ const UsersPage = () => {
   const { data: users = [], isLoading: loading } = useQuery<AccountUser[], Error>({
     queryKey: ["users"],
     queryFn: async ({ signal }) => {
-      const json = await apiClient.get<any>("/accounts/get-accounts", signal);
+      const json = await apiClient.get<any>("/accounts/get-accounts?orderBy=created_at&direction=DESC", signal);
       const arr: AccountUser[] = Array.isArray(json.data) ? json.data : [];
       return arr.filter((u) => u.type === "student");
     },
