@@ -1,7 +1,11 @@
 // API configuration - validate in production
 const getApiUrl = (): string => {
-  const baseUrl =
-    import.meta.env.VITE_API_URL || "https://learnova-backend-api.onrender.com";
+  const baseUrl = import.meta.env.VITE_API_URL;
+
+  if (!baseUrl) {
+    throw new Error("VITE_API_URL is not configured");
+  }
+
   return `${baseUrl.replace(/\/$/, "")}/api/v1`;
 };
 
