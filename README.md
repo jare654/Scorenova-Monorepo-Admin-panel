@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# Scorenova Admin
 
-TODO: Document your project here
+
