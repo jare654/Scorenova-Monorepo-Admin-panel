@@ -44,6 +44,7 @@ type AccountUser = {
   updatedAt: string;
   lastActiveAt: string;
   gradeId?: string;
+  streamId?: string; 
   premiumStartDate?: string | null;
   premiumEndDate?: string | null;
   premiumPlan?: string | null;
@@ -468,11 +469,11 @@ const UsersPage = () => {
                         </div>
                         <div>
                           <p className="font-medium">{u.name}</p>
-                          <p className="text-xs text-muted-foreground">{u.email || "—"}</p>
+                          <p className="text-xs text-muted-foreground">{u.email || "--"}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 text-sm">{getStreamName(u.gradeId)}</td>
+                  <td className="p-3 text-sm">{getStreamName(u.streamId)}</td>
                     <td className="p-3">
                       <Badge
                         variant="outline"
@@ -562,7 +563,7 @@ const UsersPage = () => {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-muted rounded-lg p-3">
                 <p className="text-muted-foreground text-xs">Stream</p>
-                <p className="font-semibold">{getStreamName(selectedUser.gradeId)}</p>
+                <p className="font-semibold">{getStreamName(selectedUser.streamId)}</p>
               </div>
               <div className="bg-muted rounded-lg p-3">
                 <p className="text-muted-foreground text-xs">Status</p>
