@@ -31,9 +31,76 @@ const getCooldownUntil = new Map<string, number>();
 async function enqueueGet<T>(key: string, work: () => Promise<T>): Promise<T> {
   return work();
 }
-
 function getToken(): string | null {
   return localStorage.getItem("token");
+}
+function getRefreshToken(): string | null {
+  return localStorage.getItem("refreshToken");
+}
+
+function setTokens(accessToken: string, refreshToken?: string) {
+  localStorage.setItem("token", accessToken);
+  if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+  try {
+    window.dispatchEvent(
+      new CustomEvent("auth:token-refreshed", { detail: { accessToken, refreshToken } })
+    );
+  } catch {
+    /* noop */
+  }
+}
+
+function clearAuth() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  localStorage.removeItem("refreshToken");
+  try {
+    window.dispatchEvent(new Event("auth:logout"));
+  } catch {
+    /* noop */
+  }
+}
+
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      clearAuth();
+      return null;
+    }
+    try {
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-refresh-token": refreshToken,
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) {
+        clearAuth();
+        return null;
+      }
+      const data = await res.json();
+      if (!data?.accessToken) {
+        clearAuth();
+        return null;
+      }
+      setTokens(data.accessToken, data.refreshToken);
+      return data.accessToken as string;
+    } catch {
+      clearAuth();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
 function buildHeaders(body?: BodyInit | null): Headers {
@@ -197,19 +264,30 @@ export class ApiClient {
       }
     }
 
-    const execute = async (): Promise<T> => {
-      let lastError: Error | null = null;
+   const execute = async (): Promise<T> => {
+  let lastError: Error | null = null;
+  let refreshedOnce = false;
 
-      for (let attempt = 0; attempt <= retries; attempt += 1) {
-        // If the signal was already aborted before we start, bail out silently
-        if (signal?.aborted) {
-          const abortErr = new DOMException("signal is aborted without reason", "AbortError");
-          throw abortErr;
-        }
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    // If the signal was already aborted before we start, bail out silently
+    if (signal?.aborted) {
+      const abortErr = new DOMException("signal is aborted without reason", "AbortError");
+      throw abortErr;
+    }
 
-        const response = await fetchWithTimeout(url, requestOptions, timeoutMs);
+    let response = await fetchWithTimeout(url, requestOptions, timeoutMs);
 
-        if (response.status === 429) {
+    // Silent refresh: on 401 (expired token), try refreshing once and retry the request
+    if (response.status === 401 && !endpoint.startsWith("/auth/") && !refreshedOnce) {
+      refreshedOnce = true;
+      const newAccessToken = await refreshAccessToken();
+      if (newAccessToken) {
+        requestOptions.headers = buildHeaders(requestBody ?? null);
+        response = await fetchWithTimeout(url, requestOptions, timeoutMs);
+      }
+    }
+
+    if (response.status === 429) {
           getCooldownUntil.set(url, Date.now() + GET_COOLDOWN_ON_429_MS);
         }
 
