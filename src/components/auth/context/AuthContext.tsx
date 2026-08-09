@@ -51,6 +51,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       const token = data?.accessToken;
+const refreshToken = data?.refreshToken;
 
       const loggedInUser: AdminUser = {
         id: data?.profile?.id || "admin",
@@ -60,11 +61,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         lastLogin: new Date().toISOString(),
       };
 
-      setToken(token);
-      setUser(loggedInUser);
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(loggedInUser));
+     setToken(token);
+setUser(loggedInUser);
+localStorage.setItem("token", token);
+localStorage.setItem("user", JSON.stringify(loggedInUser));
+if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
       try {
         window.dispatchEvent(new Event("auth:login"));
       } catch (e) {
@@ -91,6 +92,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       /* noop */
     }
   };
+  useEffect(() => {
+  const handleTokenRefreshed = (e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    if (detail?.accessToken) setToken(detail.accessToken);
+  };
+  window.addEventListener("auth:token-refreshed", handleTokenRefreshed);
+  return () => window.removeEventListener("auth:token-refreshed", handleTokenRefreshed);
+}, []);
 
   return (
     <AuthContext.Provider
