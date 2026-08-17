@@ -14,6 +14,8 @@ export interface MockExamSummary {
   subjectId: string;
   label: string;
   questionCount: number;
+  durationMinutes: number | null;
+  isFree: boolean;
   status: "pending" | "completed" | "failed";
   errorMessage?: string | null;
   createdAt: string;
@@ -149,6 +151,20 @@ export async function renameMockExam(
 ): Promise<{ success: boolean; label: string }> {
   const payload = await apiClient.patch<unknown>(`/mocks/admin/${id}/label`, { label }, signal);
   return normalize<{ success: boolean; label: string }>(payload);
+}
+// Update mock exam duration and access type (free/paid)
+export async function updateMockExamDuration(
+  id: string,
+  durationMinutes: number | null,
+  isFree: boolean,
+  signal?: AbortSignal,
+): Promise<{ success: boolean }> {
+  const payload = await apiClient.patch<unknown>(
+    `/mocks/admin/${id}`,
+    { durationMinutes, isFree, accessType: isFree ? "free" : "paid" },
+    signal,
+  );
+  return normalize<{ success: boolean }>(payload);
 }
 
 // ─── Shared API ───────────────────────────────────────────────────────────────
