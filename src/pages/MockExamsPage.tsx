@@ -5,13 +5,14 @@ import {
   AlertCircle, ChevronLeft, FlaskConical,
   Globe, Calculator, Atom, Leaf, BookMarked,
   Users, Brain, Pencil,
+  Clock,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import {
   fetchMockSubjects, fetchAdminMockExams, fetchAdminMockExam,
   generateMockExam, deleteMockExam, pollMockExamUntilDone,
-  fetchMockResults, renameMockExam,
+  fetchMockResults, renameMockExam, updateMockExamDuration,
   type MockSubject, type MockExamSummary, type MockExamDetail,
   type MockResult,
 } from "@/services/api/mock";
@@ -22,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -313,6 +315,12 @@ const MockExamsPage = () => {
   const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget]         = useState<{ id: string; label: string } | null>(null);
   const [renameValue, setRenameValue]           = useState("");
+
+  // Duration + Free/Paid dialog state
+  const [durationTarget, setDurationTarget] = useState<{ id: string; label: string; current: number | null; currentIsFree: boolean } | null>(null);
+  const [durationValue, setDurationValue]   = useState("");
+  const [isFreeValue, setIsFreeValue]       = useState(false);
+
   const sessionPerPage = 20;
 
   // ── Streams ────────────────────────────────────────────────────────────────
@@ -453,6 +461,18 @@ const MockExamsPage = () => {
       setRenameValue("");
     },
     onError: (e: Error) => toast({ title: "Rename failed", description: e.message, variant: "destructive" }),
+  });
+
+  const durationMutation = useMutation({
+    mutationFn: ({ id, durationMinutes, isFree }: { id: string; durationMinutes: number | null; isFree: boolean }) =>
+      updateMockExamDuration(id, durationMinutes, isFree),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-mock-exams"] });
+      
+      setDurationTarget(null);
+      setDurationValue("");
+    },
+    onError: (e: Error) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -604,7 +624,7 @@ const MockExamsPage = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
-                        {["Exam", "Subject", "Questions", "Created", "Actions"].map((h) => (
+                        {["Exam", "Subject", "Questions", "Duration", "Created", "Actions"].map((h) => (
                           <th key={h} className="p-3 text-left font-medium text-muted-foreground">{h}</th>
                         ))}
                       </tr>
@@ -641,6 +661,24 @@ const MockExamsPage = () => {
                               {exam.questionCount}
                             </div>
                           </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2 text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                                {exam.durationMinutes
+                                  ? <span>{exam.durationMinutes} min</span>
+                                  : <span className="text-muted-foreground text-xs">Auto (~{Math.ceil(exam.questionCount * 1.5)} min)</span>}
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className={exam.isFree
+                                  ? "bg-success/10 text-success border-success/20 text-xs"
+                                  : "bg-muted text-muted-foreground text-xs"}
+                              >
+                                {exam.isFree ? "Free" : "Paid"}
+                              </Badge>
+                            </div>
+                          </td>
                           <td className="p-3 text-xs text-muted-foreground">
                             {new Date(exam.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                           </td>
@@ -665,6 +703,19 @@ const MockExamsPage = () => {
                                 onClick={() => { setRenameTarget({ id: exam.id, label: exam.label }); setRenameValue(exam.label); }}
                               >
                                 <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Set duration & access"
+                                onClick={() => {
+                                  setDurationTarget({ id: exam.id, label: exam.label, current: exam.durationMinutes, currentIsFree: exam.isFree });
+                                  setDurationValue(exam.durationMinutes ? String(exam.durationMinutes) : "");
+                                  setIsFreeValue(exam.isFree);
+                                }}
+                              >
+                                <Clock className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -818,6 +869,75 @@ const MockExamsPage = () => {
               onClick={() => renameTarget && renameMutation.mutate({ id: renameTarget.id, label: renameValue.trim() })}
             >
               {renameMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Duration & Access Dialog ── */}
+      <Dialog open={!!durationTarget} onOpenChange={(v) => !v && setDurationTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set Exam Duration & Access</DialogTitle>
+            <DialogDescription>
+              Override the timer and access level for "{durationTarget?.label}". Leave duration empty to use the automatic value (questions × 1.5 min).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="space-y-1.5">
+              <Label>Duration (minutes)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={durationValue}
+                onChange={(e) => setDurationValue(e.target.value)}
+                placeholder="Auto"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Access</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFreeValue(true)}
+                  className={`rounded-lg border-2 py-2 text-sm font-medium transition-colors ${
+                    isFreeValue ? "border-primary bg-primary/10 text-primary" : "border-muted text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  Free
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFreeValue(false)}
+                  className={`rounded-lg border-2 py-2 text-sm font-medium transition-colors ${
+                    !isFreeValue ? "border-primary bg-primary/10 text-primary" : "border-muted text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  Paid
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {durationTarget?.current != null && (
+              <Button
+                variant="outline"
+                disabled={durationMutation.isPending}
+                onClick={() => durationTarget && durationMutation.mutate({ id: durationTarget.id, durationMinutes: null, isFree: isFreeValue })}
+              >
+                Reset Duration to Auto
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setDurationTarget(null)}>Cancel</Button>
+            <Button
+              disabled={durationMutation.isPending}
+              onClick={() => {
+                if (!durationTarget) return;
+                const n = durationValue.trim() === "" ? null : parseInt(durationValue, 10);
+                durationMutation.mutate({ id: durationTarget.id, durationMinutes: n, isFree: isFreeValue });
+              }}
+            >
+              {durationMutation.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

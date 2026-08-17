@@ -62,14 +62,14 @@ const SidebarContent = ({
         )}
       >
         <img
-          src="/learnova-logo.jpg"
-          alt="Learnova"
+          src="/Scorenova-logo.jpg"
+          alt="Scorenova Logo"
           className="h-8 w-8 shrink-0 rounded-full border bg-white"
         />
         {!collapsed && (
           <div className="overflow-hidden">
             
-            <h1 className="text-sm font-bold leading-tight">Learnova</h1>
+            <h1 className="text-sm font-bold leading-tight">Scorenova</h1>
             <p className="text-xs text-sidebar-foreground/60">Ethiopia</p>
           </div>
         )}

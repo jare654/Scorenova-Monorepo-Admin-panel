@@ -381,7 +381,7 @@ const PremiumSettingsSection = () => {
           <Label htmlFor="sp-telegram">Telegram Support Link</Label>
           <Input
             id="sp-telegram"
-            placeholder="@LearnovaSupport"
+            placeholder="@Scorenova Support"
             value={telegramSupport}
             onChange={(e) => setTelegramSupport(e.target.value)}
           />
