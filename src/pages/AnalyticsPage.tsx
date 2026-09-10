@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Users,
   Activity,
   Clock,
   TrendingUp,
   Download,
+  GraduationCap,
+  BookOpen,
+  Layers,
+  FileQuestion,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 import KPICard from "@/components/KPICard";
@@ -259,25 +265,148 @@ const AnalyticsPage = () => {
 
   // ── Derived Values ───────────────────────────────────────────────────────────
 
-  const packagePieData = packageData
-    ? [
-        { name: "Premium", value: packageData.premium ?? 0 },
-        { name: "Free", value: packageData.free ?? 0 },
-      ]
-    : [];
+  const packagePieData = useMemo(() => {
+    if (!packageData) return [];
+    const premium = Number(packageData.premium ?? 0);
+    const free = Number(packageData.free ?? 0);
+    if (premium === 0 && free === 0) return [];
+    return [
+      { name: "Premium", value: premium, color: COLORS.accent },
+      { name: "Free", value: free, color: COLORS.primary },
+    ];
+  }, [packageData]);
 
-  const passFailPieData = passFailData
-    ? [
-        { name: "Pass", value: passFailData.passed ?? 0 },
-        { name: "Fail", value: passFailData.failed ?? 0 },
-      ]
-    : [];
+  // Pass / Fail Ratio calculation
+  const passFailSummary = useMemo(() => {
+    if (!passFailData) {
+      return { passed: 0, failed: 0, total: 0, passRate: 0, hasData: false };
+    }
+    const passed = Number(passFailData.passed ?? 0);
+    const failed = Number(passFailData.failed ?? 0);
+    const total = Number(passFailData.total ?? passed + failed);
+    const passRate =
+      total > 0
+        ? Number(passFailData.passRate ?? ((passed / total) * 100).toFixed(1))
+        : 0;
+    return {
+      passed,
+      failed,
+      total,
+      passRate,
+      hasData: total > 0,
+    };
+  }, [passFailData]);
 
-  const dropOffRows: any[] = Array.isArray(dropOffData) ? dropOffData : [];
-  const coverageRows: any[] = Array.isArray(coverageData) ? coverageData : [];
-  const difficultyRows: any[] = Array.isArray(difficultyData)
-    ? difficultyData
-    : [];
+  const passFailPieData = useMemo(() => {
+    if (!passFailSummary.hasData) return [];
+    const slices = [];
+    if (passFailSummary.passed > 0) {
+      slices.push({
+        name: "Pass",
+        value: passFailSummary.passed,
+        color: "#10b981",
+      });
+    }
+    if (passFailSummary.failed > 0) {
+      slices.push({
+        name: "Fail",
+        value: passFailSummary.failed,
+        color: "#ef4444",
+      });
+    }
+    return slices;
+  }, [passFailSummary]);
+
+  // Drop-off points calculation
+  const dropOffRows = useMemo(() => {
+    const raw = Array.isArray(dropOffData)
+      ? dropOffData
+      : Array.isArray(dropOffData?.data)
+      ? dropOffData.data
+      : [];
+
+    return raw.map((row: any, i: number) => {
+      const subjectName =
+        row.subjectName ?? row.label ?? row.name ?? `Subject ${i + 1}`;
+      const uniqueUsers = Number(row.uniqueUsers ?? 0);
+      const totalAttempts = Number(row.totalAttempts ?? 0);
+      const avgAttemptsPerUser = Number(
+        row.avgAttemptsPerUser ??
+          (uniqueUsers > 0 ? (totalAttempts / uniqueUsers).toFixed(1) : 0),
+      );
+      const isDropOff =
+        row.isDropOff !== undefined
+          ? Boolean(row.isDropOff)
+          : avgAttemptsPerUser < 5 && uniqueUsers > 0;
+
+      const benchmark = 10;
+      const engagementPercent = Math.min(
+        100,
+        Math.round((avgAttemptsPerUser / benchmark) * 100),
+      );
+      const dropRate =
+        row.dropRate ??
+        (isDropOff
+          ? Math.max(25, 100 - engagementPercent)
+          : Math.max(5, 100 - engagementPercent));
+
+      return {
+        subjectName,
+        uniqueUsers,
+        totalAttempts,
+        avgAttemptsPerUser,
+        isDropOff,
+        engagementPercent,
+        dropRate,
+      };
+    });
+  }, [dropOffData]);
+
+  // Content coverage calculation
+  const coverageRows = useMemo(() => {
+    const raw = Array.isArray(coverageData)
+      ? coverageData
+      : Array.isArray(coverageData?.data)
+      ? coverageData.data
+      : [];
+
+    return raw.map((c: any) => {
+      let streamName = c.streamName ?? c.subject ?? c.name ?? "General";
+      if (
+        streamName.toLowerCase() === "unassigned" ||
+        c.streamId === "unassigned"
+      ) {
+        streamName = "Common Curriculum";
+      }
+      return {
+        streamName,
+        coveragePercent: Number(c.coveragePercent ?? c.coverage ?? 0),
+        totalSubjects: Number(c.totalSubjects ?? 0),
+        attemptedSubjects: Number(c.attemptedSubjects ?? 0),
+      };
+    });
+  }, [coverageData]);
+
+  // Question difficulty stats calculation
+  const difficultyRows = useMemo(() => {
+    const raw = Array.isArray(difficultyData)
+      ? difficultyData
+      : Array.isArray(difficultyData?.data)
+      ? difficultyData.data
+      : [];
+
+    return raw.map((d: any) => {
+      const rawDiff = String(d.difficulty ?? d.level ?? "medium").toLowerCase();
+      const label = rawDiff.charAt(0).toUpperCase() + rawDiff.slice(1);
+      return {
+        difficulty: label,
+        attempts: Number(d.attempts ?? d.count ?? 0),
+        correct: Number(d.correct ?? 0),
+        accuracy: Number(d.accuracy ?? 0),
+      };
+    });
+  }, [difficultyData]);
+
   const regTrendRows: any[] = regTrend?.data ?? [];
   const peakHoursRows: any[] = peakHours?.hours ?? [];
 
@@ -403,70 +532,241 @@ const AnalyticsPage = () => {
 
         {/* ── Learning ── */}
         <TabsContent value="learning" className="mt-4 space-y-6">
-          {/* Pass / Fail */}
+          {/* Pass / Fail & Drop-off Points */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-card rounded-lg border p-6 shadow-sm">
-              <h3 className="font-semibold mb-4">Pass / Fail Ratio</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={passFailPieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
+            {/* Pass / Fail */}
+            <div className="bg-card rounded-xl border p-6 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-foreground">Pass / Fail Ratio</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Sessions with ≥50% accuracy considered passing
+                  </p>
+                </div>
+                {passFailSummary.hasData && (
+                  <Badge
+                    variant="outline"
+                    className={
+                      passFailSummary.passRate >= 50
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold"
+                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 font-semibold"
                     }
                   >
-                    <Cell fill={COLORS.secondary} />
-                    <Cell fill={COLORS.danger} />
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+                    {passFailSummary.passRate}% Pass Rate
+                  </Badge>
+                )}
+              </div>
+
+              {!passFailSummary.hasData ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-center">
+                  <GraduationCap className="h-10 w-10 mb-2.5 opacity-30 text-primary" />
+                  <p className="text-sm font-medium text-foreground">No Exam Attempts Recorded</p>
+                  <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                    Pass/fail metrics will automatically calculate as students take practice sessions and mock exams.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <ResponsiveContainer width="100%" height={190}>
+                    <PieChart>
+                      <Pie
+                        data={passFailPieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={75}
+                        paddingAngle={passFailPieData.length > 1 ? 4 : 0}
+                      >
+                        {passFailPieData.map((entry) => (
+                          <Cell
+                            key={entry.name}
+                            fill={entry.color}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(val: any, name: any) => {
+                          const v = Number(val) || 0;
+                          const pct =
+                            passFailSummary.total > 0
+                              ? ((v / passFailSummary.total) * 100).toFixed(1)
+                              : 0;
+                          return [`${v} sessions (${pct}%)`, name];
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+
+                  {/* Summary Breakdown */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t text-xs">
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                      <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-muted-foreground">Passed</p>
+                        <p className="font-bold text-foreground">
+                          {passFailSummary.passed}{" "}
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            ({passFailSummary.passRate}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-rose-500/5 border border-rose-500/10">
+                      <div className="h-2.5 w-2.5 rounded-full bg-rose-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-muted-foreground">Failed</p>
+                        <p className="font-bold text-foreground">
+                          {passFailSummary.failed}{" "}
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            ({(100 - passFailSummary.passRate).toFixed(1)}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    Based on {passFailSummary.total} completed session{passFailSummary.total !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Drop-off Points */}
-            <div className="bg-card rounded-lg border p-6 shadow-sm">
-              <h3 className="font-semibold mb-4">Drop-off Points</h3>
-              <div className="space-y-3">
-                {dropOffRows.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No data.</p>
-                )}
-                {dropOffRows.map((row, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>{row.label ?? row.point ?? `Point ${i + 1}`}</span>
-                      <span className="text-muted-foreground">
-                        {row.dropRate ?? row.rate ?? 0}%
-                      </span>
-                    </div>
-                    <Progress value={row.dropRate ?? row.rate ?? 0} />
-                  </div>
-                ))}
+            <div className="bg-card rounded-xl border p-6 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-foreground">Subject Drop-off & Retention</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Subjects flagged when student engagement drops below 5 attempts
+                  </p>
+                </div>
               </div>
+
+              {dropOffRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-center">
+                  <BookOpen className="h-10 w-10 mb-2.5 opacity-30 text-primary" />
+                  <p className="text-sm font-medium text-foreground">No Engagement Data</p>
+                  <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                    Student subject attempts and drop-off rates will appear as users practice.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
+                  {dropOffRows.map((row, i) => (
+                    <div key={i} className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="font-medium text-sm truncate text-foreground">
+                            {row.subjectName}
+                          </span>
+                        </div>
+                        {row.isDropOff ? (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0 font-medium">
+                            High Drop-off
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500/20 font-medium">
+                            Active Retention
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>
+                          <strong className="text-foreground font-semibold">{row.avgAttemptsPerUser}</strong> avg attempts / student
+                        </span>
+                        <span>
+                          {row.totalAttempts} attempts ({row.uniqueUsers} student{row.uniqueUsers !== 1 ? "s" : ""})
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Progress
+                          value={Math.min(100, Math.max(10, row.engagementPercent))}
+                          className={row.isDropOff ? "[&>div]:bg-rose-500" : "[&>div]:bg-emerald-500"}
+                        />
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Engagement Score</span>
+                          <span>{row.engagementPercent}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Content Coverage */}
-          <div className="bg-card rounded-lg border p-6 shadow-sm">
-            <h3 className="font-semibold mb-4">Content Coverage</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={coverageRows} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 12 }} />
-                <YAxis
-                  dataKey="subject"
-                  type="category"
-                  width={120}
-                  tick={{ fontSize: 12 }}
-                />
-                <Tooltip formatter={(v) => `${v}%`} />
-                <Bar dataKey="coverage" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="bg-card rounded-xl border p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="font-semibold text-foreground">Curriculum Content Coverage</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Percentage of curriculum subjects actively attempted by students across educational streams
+                </p>
+              </div>
+            </div>
+
+            {coverageRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-center">
+                <Layers className="h-10 w-10 mb-2.5 opacity-30 text-primary" />
+                <p className="text-sm font-medium text-foreground">No Coverage Data</p>
+                <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                  Content coverage across curriculum streams will calculate as questions are attempted.
+                </p>
+              </div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={coverageRows} layout="vertical" margin={{ left: 20, right: 30, top: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 12 }} />
+                    <YAxis
+                      dataKey="streamName"
+                      type="category"
+                      width={140}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip
+                      formatter={(v: any, _name: any, entry: any) => [
+                        `${v}% coverage (${entry.payload.attemptedSubjects} of ${entry.payload.totalSubjects} subjects attempted)`,
+                        "Coverage",
+                      ]}
+                    />
+                    <Bar dataKey="coveragePercent" fill={COLORS.primary} radius={[0, 4, 4, 0]}>
+                      {coverageRows.map((entry, idx) => (
+                        <Cell
+                          key={idx}
+                          fill={entry.coveragePercent > 0 ? COLORS.primary : "#94a3b8"}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {/* Stream Breakdown Badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  {coverageRows.map((stream, i) => (
+                    <div key={i} className="p-3 rounded-lg border bg-muted/20 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-foreground truncate">{stream.streamName}</span>
+                        <Badge variant="outline" className="text-[10px] font-mono">
+                          {stream.coveragePercent}%
+                        </Badge>
+                      </div>
+                      <Progress value={stream.coveragePercent} className="h-1.5" />
+                      <p className="text-[11px] text-muted-foreground">
+                        {stream.attemptedSubjects} of {stream.totalSubjects} subjects practiced
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Radar */}
@@ -498,17 +798,77 @@ const AnalyticsPage = () => {
 
         {/* ── Content ── */}
         <TabsContent value="content" className="mt-4">
-          <div className="bg-card rounded-lg border p-6 shadow-sm">
-            <h3 className="font-semibold mb-4">Question Difficulty Stats</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={difficultyRows}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="difficulty" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill={COLORS.warning} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="bg-card rounded-xl border p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="font-semibold text-foreground">Question Difficulty Distribution & Performance</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Total student attempts and accuracy breakdown across difficulty tiers
+                </p>
+              </div>
+            </div>
+
+            {difficultyRows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-center">
+                <FileQuestion className="h-10 w-10 mb-2.5 opacity-30 text-primary" />
+                <p className="text-sm font-medium text-foreground">No Question Attempts Recorded</p>
+                <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                  Difficulty statistics will populate as students answer questions across subjects.
+                </p>
+              </div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={difficultyRows} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="difficulty" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(v: any, name: any, entry: any) => {
+                        if (name === "attempts")
+                          return [
+                            `${v} attempts (${entry.payload.accuracy}% accuracy)`,
+                            "Attempts",
+                          ];
+                        return [v, name];
+                      }}
+                    />
+                    <Bar dataKey="attempts" fill={COLORS.warning} radius={[4, 4, 0, 0]}>
+                      {difficultyRows.map((entry, idx) => (
+                        <Cell
+                          key={idx}
+                          fill={
+                            entry.difficulty.toLowerCase() === "easy"
+                              ? "#10b981"
+                              : entry.difficulty.toLowerCase() === "medium"
+                              ? "#f59e0b"
+                              : "#ef4444"
+                          }
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  {difficultyRows.map((diff, i) => (
+                    <div key={i} className="p-3 rounded-lg border bg-muted/20 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-foreground">
+                          {diff.difficulty}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {diff.accuracy}% Accuracy
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {diff.attempts} attempt{diff.attempts !== 1 ? "s" : ""} ({diff.correct} correct)
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </TabsContent>
 
