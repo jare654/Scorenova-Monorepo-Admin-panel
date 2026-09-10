@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Crown,
   Eye,
   Loader2,
   RefreshCw,
@@ -332,9 +333,64 @@ const ReportsPage = () => {
                 </div>
               )}
 
+              {/* Payment Receipt / Subscription Issue Callout & Quick Approval */}
+              {selected.type === "subscription_issue" && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-medium text-sm text-amber-600 dark:text-amber-400">
+                      <Crown className="h-4 w-4 text-amber-500" />
+                      <span>Payment Verification & Approval</span>
+                    </div>
+                    <Badge variant="outline" className="border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px]">
+                      Auto-Notification
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    When you approve or mark this report as <strong>Resolved</strong>, Scorenova automatically sends a push notification and in-app message to the student notifying them their payment was verified!
+                  </p>
+                  {selected.studentPhone && selected.studentPhone !== "—" && selected.status !== "resolved" && (
+                    <Button
+                      size="sm"
+                      className="w-full text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+                      disabled={statusMutation.isPending}
+                      onClick={async () => {
+                        try {
+                          await apiClient.post("/accounts/direct-grant-premium", {
+                            phoneNumber: selected.studentPhone,
+                            durationDays: 30,
+                            plan: "Monthly",
+                          });
+                          statusMutation.mutate({ id: selected.id, status: "resolved" });
+                          toast({
+                            title: "Payment Approved & Granted 🎉",
+                            description: `Premium granted and notification dispatched to ${selected.studentName || selected.studentPhone}.`,
+                          });
+                        } catch (e: any) {
+                          toast({
+                            title: "Error",
+                            description: e?.message || "Failed to grant premium.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Approve Payment & Grant 1 Month Access
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {/* Status update */}
               <div className="space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground">Update Status</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">Update Status</p>
+                  {selected.type === "subscription_issue" && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Resolving sends notification to student
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2 flex-wrap">
                   {(["open", "in_progress", "resolved", "closed"] as ReportStatus[]).map((s) => (
                     <Button

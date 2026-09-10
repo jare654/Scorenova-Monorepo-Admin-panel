@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Crown, Search, Loader2, TrendingUp, Users, DollarSign, Settings, Sparkles, ExternalLink, Calendar } from "lucide-react";
+import { Crown, Search, Loader2, TrendingUp, Users, DollarSign, Settings, Sparkles, ExternalLink, Calendar, Bell, CheckCircle2, PlusCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -425,8 +425,62 @@ const PaymentsPage = () => {
     planCounts[plan] = (planCounts[plan] ?? 0) + 1;
   }
 
+  // Quick payment approval state
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [grantPhone, setGrantPhone] = useState("");
+  const [grantDurationDays, setGrantDurationDays] = useState("30");
+  const [grantPlanName, setGrantPlanName] = useState("Monthly");
+
+  const approveMutation = useMutation({
+    mutationFn: (payload: { phoneNumber: string; durationDays: number; plan: string }) =>
+      apiClient.post<{ success: boolean; message: string; updatedCount: number }>(
+        "/accounts/direct-grant-premium",
+        payload,
+      ),
+    onSuccess: (res) => {
+      if (res.success === false) {
+        toast({
+          title: "Account Not Found",
+          description: res.message || "No account found with this phone number.",
+          variant: "destructive",
+        });
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["premium-users"] });
+      toast({
+        title: "Payment Approved 🎉",
+        description: `Premium granted and automated push notification sent to student.`,
+      });
+      setApproveDialogOpen(false);
+      setGrantPhone("");
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to approve payment and grant premium.",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Header with Direct Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Payments & Subscriptions</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage premium subscribers, configure pricing plans, and approve student payments
+          </p>
+        </div>
+        <Button onClick={() => setApproveDialogOpen(true)} className="gap-2 shrink-0">
+          <PlusCircle className="h-4 w-4" />
+          Approve Payment & Grant Access
+        </Button>
+      </div>
+
       {/* Live Mobile Paywall Plans Ribbon */}
       <div className="rounded-xl border bg-card p-4 sm:p-5 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -536,6 +590,113 @@ const PaymentsPage = () => {
           <PremiumSubscriptionsTab />
         </TabsContent>
       </Tabs>
+
+      {/* Approve Payment & Grant Access Modal */}
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Crown className="h-5 w-5 text-amber-500" />
+              Approve Payment & Grant Access
+            </DialogTitle>
+            <DialogDescription>
+              Grant premium subscription access to a student. Scorenova will automatically dispatch a real-time push notification and in-app message to their mobile phone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="student-phone">Student Phone Number</Label>
+              <Input
+                id="student-phone"
+                placeholder="e.g. 0912345678 or +251912345678"
+                value={grantPhone}
+                onChange={(e) => setGrantPhone(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Matches the last 9 digits of the student's registered mobile number.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-select">Subscription Plan</Label>
+              <Select
+                value={grantDurationDays}
+                onValueChange={(val) => {
+                  setGrantDurationDays(val);
+                  if (val === "30") setGrantPlanName("Monthly");
+                  else if (val === "90") setGrantPlanName("Quarterly");
+                  else if (val === "180") setGrantPlanName("Half-Year");
+                  else if (val === "365") setGrantPlanName("Annual");
+                }}
+              >
+                <SelectTrigger id="plan-select">
+                  <SelectValue placeholder="Select plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">Monthly Plan (30 Days)</SelectItem>
+                  <SelectItem value="90">Quarterly Plan (90 Days)</SelectItem>
+                  <SelectItem value="180">Half-Year Plan (180 Days)</SelectItem>
+                  <SelectItem value="365">Annual Plan (365 Days / 1 Year)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="rounded-lg border bg-primary/5 p-3 text-xs text-muted-foreground space-y-1.5">
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <Bell className="h-3.5 w-3.5 text-primary" />
+                <span>Automatic Notification Guaranteed</span>
+              </div>
+              <p>
+                The student will immediately receive a mobile push notification:
+                <br />
+                <em className="text-foreground">"Payment Approved & Premium Access Granted 🎉"</em>
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setApproveDialogOpen(false)}
+              disabled={approveMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!grantPhone.trim()) {
+                  toast({
+                    title: "Error",
+                    description: "Please enter the student's phone number.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                approveMutation.mutate({
+                  phoneNumber: grantPhone.trim(),
+                  durationDays: parseInt(grantDurationDays, 10) || 30,
+                  plan: grantPlanName,
+                });
+              }}
+              disabled={approveMutation.isPending || !grantPhone.trim()}
+              className="gap-1.5"
+            >
+              {approveMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Approving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Approve & Notify Student
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
