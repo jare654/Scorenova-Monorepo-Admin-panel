@@ -525,7 +525,9 @@ export default function AIScannerPage() {
             overviewLoading
               ? "—"
               : analyticsOverview?.performance?.successRate !== undefined
-                ? `${analyticsOverview.performance.successRate}%`
+                ? String(analyticsOverview.performance.successRate).endsWith("%")
+                  ? String(analyticsOverview.performance.successRate)
+                  : `${analyticsOverview.performance.successRate}%`
                 : "98.5%"
           }
           icon={CheckCircle2}
@@ -595,8 +597,14 @@ export default function AIScannerPage() {
                 <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <Tooltip
                   formatter={(value: any, name: any) => {
-                    const label = name === "success" ? "Success" : name === "nonQuestion" ? "Auto-Filtered" : "Errors";
-                    return [value, label];
+                    const n = String(name || "").toLowerCase();
+                    const label =
+                      n.includes("success")
+                        ? "Success"
+                        : n.includes("filter") || n.includes("nonquestion")
+                          ? "Auto-Filtered"
+                          : "Errors";
+                    return [Number(value).toLocaleString(), label];
                   }}
                   contentStyle={{
                     backgroundColor: "#0f172a",
