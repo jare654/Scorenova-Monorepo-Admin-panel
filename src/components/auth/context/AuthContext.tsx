@@ -21,17 +21,51 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  // ✅ Restore session
+  // ✅ Restore session and sanitize legacy cached branding
   useEffect(() => {
     const savedToken = localStorage.getItem("token");
     const savedUser = localStorage.getItem("user");
 
     if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      try {
+        const parsed = JSON.parse(savedUser);
+        if (parsed?.name) {
+          parsed.name = parsed.name.replace(/Learnova/gi, "Scorenova");
+        }
+        if (parsed?.email) {
+          parsed.email = parsed.email.replace(/learnova/gi, "scorenova");
+        }
+        setToken(savedToken);
+        setUser(parsed);
+        localStorage.setItem("user", JSON.stringify(parsed));
+      } catch {
+        setToken(savedToken);
+      }
     }
 
     setInitialized(true);
+
+    // Sync latest user profile from server to ensure fresh, accurate branding
+    if (savedToken) {
+      apiClient
+        .get<any>("/auth/get-user-info")
+        .then((fresh) => {
+          if (fresh && (fresh.name || fresh.email)) {
+            const cleanName = (fresh.name || "Scorenova Admin").replace(/Learnova/gi, "Scorenova");
+            const cleanEmail = (fresh.email || "admin@scorenova.et").replace(/learnova/gi, "scorenova");
+            const updatedUser: AdminUser = {
+              id: fresh.id || "admin",
+              name: cleanName,
+              email: cleanEmail,
+              role: fresh.role?.name || "Super Admin",
+              lastLogin: new Date().toISOString(),
+            };
+            setUser(updatedUser);
+            localStorage.setItem("user", JSON.stringify(updatedUser));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const login = async (phoneNumber: string, password: string) => {
@@ -52,21 +86,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
       const token = data?.accessToken;
-const refreshToken = data?.refreshToken;
+      const refreshToken = data?.refreshToken;
+
+      const rawName = data?.profile?.name || "Scorenova Admin";
+      const cleanName = rawName.replace(/Learnova/gi, "Scorenova");
+      const rawEmail = data?.profile?.email || "admin@scorenova.et";
+      const cleanEmail = rawEmail.replace(/learnova/gi, "scorenova");
 
       const loggedInUser: AdminUser = {
         id: data?.profile?.id || "admin",
-        name: data?.profile?.name || "Admin",
-        email: data?.profile?.email || "admin@scorenova.et",
+        name: cleanName,
+        email: cleanEmail,
         role: data?.profile?.currentRole?.name || "Super Admin",
         lastLogin: new Date().toISOString(),
       };
 
-     setToken(token);
-setUser(loggedInUser);
-localStorage.setItem("token", token);
-localStorage.setItem("user", JSON.stringify(loggedInUser));
-if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      setToken(token);
+      setUser(loggedInUser);
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(loggedInUser));
+      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
       try {
         window.dispatchEvent(new Event("auth:login"));
       } catch (e) {

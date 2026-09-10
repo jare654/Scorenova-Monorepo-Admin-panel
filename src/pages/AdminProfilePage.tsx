@@ -68,9 +68,10 @@ const AdminProfilePage = () => {
     }
   };
 
-  const displayName = userInfo?.name ?? user?.name ?? "—";
-  const displayRole = userInfo?.role?.name ?? user?.role ?? "—";
-  const displayEmail = userInfo?.email ?? user?.email ?? "—";
+  const rawName = userInfo?.name ?? user?.name ?? "Scorenova Admin";
+  const displayName = rawName.replace(/Learnova/gi, "Scorenova");
+  const displayRole = userInfo?.role?.name ?? user?.role ?? "Super Admin";
+  const displayEmail = (userInfo?.email ?? user?.email ?? "admin@scorenova.et").replace(/learnova/gi, "scorenova");
   const displayPhone = userInfo?.phoneNumber ?? "—";
   const displayLastLogin = user?.lastLogin
     ? new Date(user.lastLogin).toLocaleString()

@@ -62,8 +62,8 @@ const EditProfilePage = () => {
         const data = await apiClient.get<any>("/auth/get-user-info");
 
         form.reset({
-          name: data.name ?? "",
-          email: data.email ?? "",
+          name: (data.name ?? "Scorenova Admin").replace(/Learnova/gi, "Scorenova"),
+          email: (data.email ?? "admin@scorenova.et").replace(/learnova/gi, "scorenova"),
           phoneNumber: data.phoneNumber ?? "251",
           gender: data.gender ?? "",
           address: data.address ?? "",

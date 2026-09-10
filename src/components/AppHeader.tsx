@@ -77,7 +77,7 @@ const AppHeader = ({ title, section = "Portal", onMenuClick }: AppHeaderProps) =
               </div>
               <div className="hidden md:flex flex-col text-left leading-none">
                 <span className="text-xs font-semibold text-foreground">
-                  {user?.name || "Admin"}
+                  {(user?.name || "Scorenova Admin").replace(/Learnova/gi, "Scorenova")}
                 </span>
                 <span className="text-[10px] text-muted-foreground mt-0.5">
                   {user?.role || "Super Admin"}
@@ -87,8 +87,12 @@ const AppHeader = ({ title, section = "Portal", onMenuClick }: AppHeaderProps) =
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-lg">
             <DropdownMenuLabel className="font-normal px-2 py-1.5">
-              <p className="text-xs font-semibold text-foreground">{user?.name || "Admin"}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{user?.email || "admin@scorenova.et"}</p>
+              <p className="text-xs font-semibold text-foreground">
+                {(user?.name || "Scorenova Admin").replace(/Learnova/gi, "Scorenova")}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {(user?.email || "admin@scorenova.et").replace(/learnova/gi, "scorenova")}
+              </p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
