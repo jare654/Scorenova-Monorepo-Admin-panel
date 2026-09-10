@@ -19,6 +19,7 @@ import AddQuestionPage from "@/pages/AddQuestionPage";
 import AdminProfilePage from "@/pages/AdminProfilePage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import EditProfilePage from "@/pages/EditProfilePage";
+import AIScannerPage from "@/pages/AIScannerPage";
 
 // Mock ResizeObserver
 global.ResizeObserver = class {
@@ -60,6 +61,10 @@ describe("Page rendering tests", () => {
 
   it("renders EditProfilePage without crashing", () => {
     expect(() => render(wrap(<EditProfilePage />))).not.toThrow();
+  });
+
+  it("renders AIScannerPage without crashing", () => {
+    expect(() => render(wrap(<AIScannerPage />))).not.toThrow();
   });
 
   it("renders QuestionsPage without crashing", () => {

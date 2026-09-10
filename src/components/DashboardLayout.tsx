@@ -9,6 +9,7 @@ const routeMeta: Record<string, { title: string; section: string }> = {
   "/analytics":          { title: "Platform Analytics",     section: "Core" },
   "/questions":          { title: "Question Bank",         section: "Curriculum" },
   "/questions/new":      { title: "Add New Question",      section: "Curriculum" },
+  "/ai-scanner":         { title: "AI Scanner Telemetry",  section: "Curriculum" },
   "/mock-exams":         { title: "Mock Exams",            section: "Curriculum" },
   "/practice":           { title: "Curriculum Practice",   section: "Curriculum" },
   "/flagged-questions":  { title: "Flagged Questions",     section: "Curriculum" },

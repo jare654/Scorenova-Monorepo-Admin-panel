@@ -14,6 +14,7 @@ import {
   MessageSquareWarning,
   LogOut,
   Sparkles,
+  ScanText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ const navGroups: NavGroup[] = [
     label: "Curriculum",
     items: [
       { title: "Question Bank",    path: "/questions",        icon: FileQuestion },
+      { title: "AI Scanner",       path: "/ai-scanner",       icon: ScanText, badge: "AI" },
       { title: "Mock Exams",       path: "/mock-exams",       icon: BookOpen },
       { title: "Practice",         path: "/practice",         icon: Dumbbell },
       { title: "Flagged Questions",path: "/flagged-questions",icon: Flag },

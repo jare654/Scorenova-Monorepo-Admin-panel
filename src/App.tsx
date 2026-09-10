@@ -24,6 +24,7 @@ import EditProfilePage from "../src/pages/EditProfilePage";
 import NotificationTestPage from "./pages/NotificationTestPage";
 import ReportsPage from "./pages/ReportsPage";
 import FlaggedQuestionsPage from "./pages/FlaggedQuestionsPage";
+import AIScannerPage from "./pages/AIScannerPage";
 import { AccountsProvider } from "@/components/auth/context/Accountcontext";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -72,6 +73,7 @@ const App = () => (
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/questions" element={<QuestionsPage />} />
                   <Route path="/questions/new" element={<AddQuestionPage />} />
+                  <Route path="/ai-scanner" element={<AIScannerPage />} />
                   <Route path="/mock-exams" element={<MockExamsPage />} />
                   <Route path="/practice" element={<PracticePage />} />
                   <Route path="/users" element={<UsersPage />} />
