@@ -273,19 +273,28 @@ const UsersPage = () => {
   });
 
   const sendNotificationMutation = useMutation({
-    mutationFn: ({ userId, title, body, channel }: {
+    mutationFn: ({ userId, title, body }: {
       userId: string; title: string; body: string;
-      channel: "notification" | "sms" | "both";
-    }) => apiClient.post(`/accounts/${userId}/notify`, { title, body, channel }),
+      channel?: "notification" | "sms" | "both";
+    }) =>
+      apiClient.post(`/accounts/${userId}/notify`, {
+        title: title.trim(),
+        body: body.trim(),
+      }),
     onMutate:  () => setNotifyLoading(true),
     onSuccess: () => {
-      toast({ title: "Success", description: "Message sent successfully." });
+      toast({ title: "Success", description: "Message dispatched to student device successfully." });
       setNotifyDialogOpen(false);
       setNotifyTitle("");
       setNotifyBody("");
       setNotifyChannel("notification");
     },
-    onError:   () => toast({ title: "Error", description: "Failed to send message.", variant: "destructive" }),
+    onError:   (e: any) =>
+      toast({
+        title: "Error",
+        description: e?.message || "Failed to send message.",
+        variant: "destructive",
+      }),
     onSettled: () => setNotifyLoading(false),
   });
 
