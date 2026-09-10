@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import {
   Plus, Upload, Pencil, Trash2, Search, Loader2,
   FileDown, FileUp, CheckCircle2, AlertCircle, X,
@@ -650,7 +651,7 @@ const QuestionsPage = () => {
                 questions.map((q) => {
                   const subjectName = q.subjectName ?? subjectNameById.get(q.subjectId ?? "") ?? "—";
                   const streamId = subjectStreamIdById.get(q.subjectId ?? "");
-                  const streamName = streamId ? (streamNameById.get(streamId) ?? "—") : "—";
+                  const streamName = (streamId ? streamNameById.get(streamId) : null) || "—";
                   const isNatural = streamName.toLowerCase().includes("natural");
                   const isSocial = streamName.toLowerCase().includes("social");
 
@@ -682,7 +683,7 @@ const QuestionsPage = () => {
                         {subjectName}
                       </td>
                       <td className="py-3 px-4">
-                        <Badge variant="outline" className={cn("text-[10px] uppercase font-bold", difficultyColors[q.difficulty] ?? "")}>
+                        <Badge variant="outline" className={cn("text-[10px] uppercase font-bold", difficultyColors[q.difficulty?.toLowerCase()] ?? "")}>
                           {q.difficulty || "medium"}
                         </Badge>
                       </td>
