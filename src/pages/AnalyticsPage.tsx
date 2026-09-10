@@ -103,7 +103,7 @@ const AnalyticsPage = () => {
     staleTime: 60_000,
   });
 
-  // ── Users Tab (Lazy loaded) ───────────────────────────────────────────────────
+  // ── Users Tab ─────────────────────────────────────────────────────────────────
 
   const { data: packageData } = useQuery({
     queryKey: ["analytics-packages"],
@@ -111,7 +111,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/users-by-package")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && activeTab === "users",
+    enabled: !!token,
     staleTime: 60_000,
   });
 
@@ -121,7 +121,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/registration-trend")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && activeTab === "users",
+    enabled: !!token,
     staleTime: 60_000,
   });
 
@@ -131,7 +131,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/peak-hours")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && activeTab === "users",
+    enabled: !!token,
     staleTime: 60_000,
   });
 
@@ -141,11 +141,11 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/average-study-time")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && (activeTab === "users" || activeTab === "learning"),
+    enabled: !!token,
     staleTime: 60_000,
   });
 
-  // ── Learning Tab (Lazy loaded) ────────────────────────────────────────────────
+  // ── Learning Tab ──────────────────────────────────────────────────────────────
 
   const { data: passFailData } = useQuery({
     queryKey: ["analytics-pass-fail"],
@@ -153,7 +153,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/pass-fail-ratio")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && activeTab === "learning",
+    enabled: !!token,
     staleTime: 60_000,
   });
 
@@ -163,7 +163,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/drop-off-points")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && activeTab === "learning",
+    enabled: !!token,
     staleTime: 60_000,
   });
 
@@ -173,11 +173,11 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/content-coverage")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && (activeTab === "learning" || activeTab === "content"),
+    enabled: !!token,
     staleTime: 60_000,
   });
 
-  // ── Content Tab (Lazy loaded) ─────────────────────────────────────────────────
+  // ── Content Tab ───────────────────────────────────────────────────────────────
 
   const { data: difficultyData } = useQuery({
     queryKey: ["analytics-difficulty"],
@@ -185,7 +185,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/question-difficulty-stats")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token && activeTab === "content",
+    enabled: !!token,
     staleTime: 60_000,
   });
 
@@ -387,7 +387,7 @@ const AnalyticsPage = () => {
     });
   }, [coverageData]);
 
-  // Question difficulty stats calculation
+  // Question difficulty stats calculation — guarantee Easy, Medium, Hard are sorted and present
   const difficultyRows = useMemo(() => {
     const raw = Array.isArray(difficultyData)
       ? difficultyData
@@ -395,19 +395,57 @@ const AnalyticsPage = () => {
       ? difficultyData.data
       : [];
 
-    return raw.map((d: any) => {
+    const order = ["Easy", "Medium", "Hard"];
+    const tierMap = new Map<string, { attempts: number; correct: number; accuracy: number }>();
+    order.forEach((t) => tierMap.set(t, { attempts: 0, correct: 0, accuracy: 0 }));
+
+    raw.forEach((d: any) => {
       const rawDiff = String(d.difficulty ?? d.level ?? "medium").toLowerCase();
       const label = rawDiff.charAt(0).toUpperCase() + rawDiff.slice(1);
-      return {
-        difficulty: label,
-        attempts: Number(d.attempts ?? d.count ?? 0),
-        correct: Number(d.correct ?? 0),
-        accuracy: Number(d.accuracy ?? 0),
-      };
+      const attempts = Number(d.attempts ?? d.count ?? 0);
+      const correct = Number(d.correct ?? 0);
+      const accuracy = Number(
+        d.accuracy ?? (attempts > 0 ? ((correct / attempts) * 100).toFixed(1) : 0),
+      );
+      tierMap.set(label, { attempts, correct, accuracy });
     });
+
+    return Array.from(tierMap.entries()).map(([difficulty, stats]) => ({
+      difficulty,
+      ...stats,
+    }));
   }, [difficultyData]);
 
-  const regTrendRows: any[] = regTrend?.data ?? [];
+  const difficultyHasData = useMemo(() => {
+    return difficultyRows.some((r) => r.attempts > 0);
+  }, [difficultyRows]);
+
+  // Registration trend calculation — handles unwrap array or { data: [...] } envelope
+  const regTrendRows = useMemo(() => {
+    const raw = Array.isArray(regTrend)
+      ? regTrend
+      : Array.isArray(regTrend?.data)
+      ? regTrend.data
+      : [];
+
+    return raw.map((r: any) => {
+      let formattedDate = r.date;
+      if (r.date) {
+        try {
+          const d = new Date(r.date);
+          formattedDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        } catch {
+          formattedDate = String(r.date).slice(0, 10);
+        }
+      }
+      return {
+        date: formattedDate,
+        rawDate: r.date,
+        count: Number(r.count ?? 0),
+      };
+    });
+  }, [regTrend]);
+
   const peakHoursRows: any[] = peakHours?.hours ?? [];
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -466,22 +504,49 @@ const AnalyticsPage = () => {
         <TabsContent value="users" className="mt-4 space-y-6">
           {/* Registration Trend */}
           <div className="bg-card rounded-lg border p-6 shadow-sm">
-            <h3 className="font-semibold mb-4">Registration Trend</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={regTrendRows}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="count"
-                  stroke={COLORS.primary}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-foreground">Registration Trend</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  New student signups over the last 30 days
+                </p>
+              </div>
+              {regTrendRows.length > 0 && (
+                <Badge variant="outline" className="font-mono text-xs">
+                  {regTrendRows.reduce((sum, r) => sum + r.count, 0)} Total
+                </Badge>
+              )}
+            </div>
+
+            {regTrendRows.length === 0 ? (
+              <div className="h-[220px] flex flex-col items-center justify-center text-muted-foreground text-sm">
+                <Users className="h-8 w-8 mb-2 opacity-30 text-primary" />
+                <p className="font-medium text-foreground">No Registration Trend Data</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  New student signups will appear here over time.
+                </p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={regTrendRows} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(v: any) => [`${v} student${v !== 1 ? "s" : ""}`, "Registered"]}
+                    labelFormatter={(label: any) => `Date: ${label}`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke={COLORS.primary}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: COLORS.primary }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           {/* Package split + Peak hours */}
@@ -808,7 +873,7 @@ const AnalyticsPage = () => {
               </div>
             </div>
 
-            {difficultyRows.length === 0 ? (
+            {!difficultyHasData ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-center">
                 <FileQuestion className="h-10 w-10 mb-2.5 opacity-30 text-primary" />
                 <p className="text-sm font-medium text-foreground">No Question Attempts Recorded</p>
@@ -819,15 +884,15 @@ const AnalyticsPage = () => {
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={difficultyRows} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                  <BarChart data={difficultyRows} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="difficulty" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                     <Tooltip
                       formatter={(v: any, name: any, entry: any) => {
                         if (name === "attempts")
                           return [
-                            `${v} attempts (${entry.payload.accuracy}% accuracy)`,
+                            `${v} attempt${v !== 1 ? "s" : ""} (${entry.payload.accuracy}% accuracy, ${entry.payload.correct} correct)`,
                             "Attempts",
                           ];
                         return [v, name];
@@ -857,8 +922,17 @@ const AnalyticsPage = () => {
                         <span className="font-semibold text-xs text-foreground">
                           {diff.difficulty}
                         </span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {diff.accuracy}% Accuracy
+                        <Badge
+                          variant="outline"
+                          className={
+                            diff.attempts > 0
+                              ? diff.accuracy >= 50
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]"
+                                : "bg-rose-500/10 text-rose-600 border-rose-500/20 text-[10px]"
+                              : "text-[10px] text-muted-foreground"
+                          }
+                        >
+                          {diff.attempts > 0 ? `${diff.accuracy}% Accuracy` : "0% Accuracy"}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">
