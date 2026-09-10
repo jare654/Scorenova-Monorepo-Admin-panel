@@ -24,8 +24,6 @@ const GET_COOLDOWN_ON_429_MS = 10000;
 
 const inflightGetRequests = new Map<string, Promise<unknown>>();
 const getResponseCache = new Map<string, { expiresAt: number; data: unknown }>();
-let lastGetRequestAt = 0;
-let getQueue: Promise<void> = Promise.resolve();
 const getCooldownUntil = new Map<string, number>();
 
 async function enqueueGet<T>(key: string, work: () => Promise<T>): Promise<T> {

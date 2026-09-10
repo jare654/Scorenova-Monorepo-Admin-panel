@@ -37,6 +37,7 @@ import {
   type Subject,
   type Topic,
 } from "@/services/api/questions";
+import { MathText } from "@/components/MathText";
 
 // ─── Reusable create dialog ───────────────────────────────────────────────────
 
@@ -186,6 +187,7 @@ const AddQuestionPage = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<{ stepByStep: string; clear: string; simplified: string } | null>(null);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // ── Stats
   const [stats, setStats] = useState<{
@@ -452,7 +454,9 @@ const AddQuestionPage = () => {
           <Button variant="outline" onClick={() => navigate("/questions")}>
             <X className="h-4 w-4 mr-1" /> Cancel
           </Button>
-          <Button variant="outline" disabled><Eye className="h-4 w-4 mr-1" /> Preview</Button>
+          <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+            <Eye className="h-4 w-4 mr-1" /> Preview
+          </Button>
           <Button onClick={handleSave} disabled={loading}>
             {loading ? "Saving..." : <><Save className="h-4 w-4 mr-1" />{isEditMode ? "Update" : "Save"}</>}
           </Button>
@@ -655,6 +659,97 @@ const AddQuestionPage = () => {
         }}
         onClose={() => setAiDialogOpen(false)}
       />
+
+      {/* Live Mobile Question Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-primary" />
+              Mobile App Preview
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {streamId && (
+                <span className="text-xs bg-muted px-2 py-0.5 rounded font-medium text-muted-foreground">
+                  {streams.find((s) => s.id === streamId)?.name ?? "Stream"}
+                </span>
+              )}
+              {subjectId && (
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
+                  {subjects.find((s) => s.id === subjectId)?.name ?? "Subject"}
+                </span>
+              )}
+              {difficulty && (
+                <span className="text-xs border px-2 py-0.5 rounded text-muted-foreground">
+                  {difficulty}
+                </span>
+              )}
+            </div>
+
+            <div className="border rounded-lg p-4 space-y-3 bg-card">
+              <h4 className="font-semibold text-sm leading-relaxed">
+                {questionText.trim() ? (
+                  <MathText text={questionText} />
+                ) : (
+                  <span className="text-muted-foreground italic">No question text entered yet...</span>
+                )}
+              </h4>
+
+              <div className="space-y-2 pt-2">
+                {options.map((opt, i) => {
+                  const isCorrect = String(i) === correctAnswer;
+                  return (
+                    <div
+                      key={i}
+                      className={`p-2.5 rounded-md border text-sm flex items-start gap-2.5 ${
+                        isCorrect
+                          ? "bg-success/10 border-success/40 text-success-foreground font-medium"
+                          : "bg-background border-border text-foreground"
+                      }`}
+                    >
+                      <span className="font-bold text-xs shrink-0 w-4">
+                        {["A", "B", "C", "D"][i]}.
+                      </span>
+                      <div className="flex-1">
+                        {opt.trim() ? (
+                          <MathText text={opt} />
+                        ) : (
+                          <span className="text-muted-foreground italic">Empty choice</span>
+                        )}
+                      </div>
+                      {isCorrect && (
+                        <span className="text-[10px] bg-success text-success-foreground px-1.5 py-0.5 rounded font-bold ml-auto shrink-0">
+                          Correct
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {explanation.trim() && (
+                <div className="mt-3 p-3 bg-muted/40 rounded-md border text-xs space-y-1">
+                  <span className="font-bold text-muted-foreground uppercase tracking-wider text-[10px]">
+                    Explanation
+                  </span>
+                  <div className="text-foreground">
+                    <MathText text={explanation} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Close Preview
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

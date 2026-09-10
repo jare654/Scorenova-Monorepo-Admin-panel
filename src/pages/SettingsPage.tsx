@@ -34,7 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api/client";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,6 +186,7 @@ const PlanAccordionItem = ({
 
 const PremiumSettingsSection = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [openPlan, setOpenPlan] = useState<string | null>(null);
 
@@ -251,7 +252,10 @@ const PremiumSettingsSection = () => {
           freeSubjectId: freeSubjectId || null,
         },
       }),
-    onSuccess: () => toast({ title: "Success", description: "Premium settings saved." }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings-premium"] });
+      toast({ title: "Success", description: "Premium settings saved." });
+    },
     onError: () =>
       toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" }),
   });

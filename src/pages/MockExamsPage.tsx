@@ -20,6 +20,7 @@ import {
   fetchSubjects, fetchStreams,
   type Subject, type Stream,
 } from "@/services/api/content";
+import { MathText } from "@/components/MathText";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -133,7 +134,9 @@ const ExamDetailDialog = ({ exam, open, onClose }: ExamDetailProps) => {
             <div key={i} className="rounded-lg border bg-card p-4 space-y-2">
               <div className="flex items-start gap-2">
                 <span className="text-xs font-mono text-muted-foreground shrink-0 pt-0.5">{i + 1}.</span>
-                <p className="text-sm font-medium">{q.question}</p>
+                <div className="text-sm font-medium flex-1">
+                  <MathText text={q.question} />
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-5">
                 {q.choices.map((c, ci) => {
@@ -142,14 +145,18 @@ const ExamDetailDialog = ({ exam, open, onClose }: ExamDetailProps) => {
                   return (
                     <div key={ci} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm border ${isCorrect ? "bg-success/10 border-success/30 text-success font-medium" : "bg-muted/40 border-transparent text-muted-foreground"}`}>
                       <span className="text-xs font-mono shrink-0">{letter}.</span>
-                      {c.replace(/^[A-D]\)\s*/i, "")}
+                      <div className="flex-1">
+                        <MathText text={c.replace(/^[A-D]\)\s*/i, "")} />
+                      </div>
                       {isCorrect && <span className="ml-auto text-xs">✓</span>}
                     </div>
                   );
                 })}
               </div>
               {q.explanation && (
-                <p className="text-xs text-muted-foreground pl-5 italic">{q.explanation}</p>
+                <div className="text-xs text-muted-foreground pl-5 italic">
+                  <MathText text={q.explanation} />
+                </div>
               )}
             </div>
           ))}

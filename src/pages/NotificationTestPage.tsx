@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Bell,
   Send,
@@ -27,6 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api/client";
 import { useQuery } from "@tanstack/react-query";
+import { fetchStreams, type Stream } from "@/services/api/questions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ type User = {
   fcmId?: string | null;
   isPremium?: boolean;
   type: string;
+  streamId?: string | null;
 };
 
 type SendResult = {
@@ -129,13 +131,25 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
   const [title, setTitle]             = useState("Test Notification");
   const [body, setBody]               = useState("This is a test push notification from the admin panel.");
   const [search, setSearch]           = useState("");
+  const [streamFilter, setStreamFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sending, setSending]         = useState(false);
   const [results, setResults]         = useState<SendResult[]>([]);
 
+  const { data: streams = [] } = useQuery<Stream[]>({
+    queryKey: ["streams"],
+    queryFn: () => fetchStreams(),
+  });
+
+  const streamNameById = useMemo(
+    () => new Map(streams.map((s) => [s.id, s.name])),
+    [streams],
+  );
+
   const withToken = allUsers.filter((u) => !!u.fcmId);
 
   const filtered = allUsers.filter((u) => {
+    if (streamFilter !== "all" && u.streamId !== streamFilter) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -148,7 +162,11 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -194,7 +212,7 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Compose */}
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="rounded-lg border bg-card p-5 space-y-4">
           <h3 className="font-semibold text-sm">Compose Notification</h3>
           <div className="space-y-1.5">
@@ -203,15 +221,16 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
           </div>
           <div className="space-y-1.5">
             <Label>Message *</Label>
-            <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Notification body text..." />
+            <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Notification body..." />
           </div>
+          {/* Preview */}
           <div className="rounded-lg border bg-muted/40 p-3 space-y-0.5">
             <p className="text-xs text-muted-foreground mb-1">Preview</p>
             <p className="text-sm font-semibold">{title || "—"}</p>
             <p className="text-xs text-muted-foreground">{body || "—"}</p>
           </div>
           <div className="flex items-center justify-between pt-1">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {selectedIds.size} recipient{selectedIds.size !== 1 ? "s" : ""} selected
             </p>
             <Button
@@ -228,43 +247,89 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
 
       {/* Recipient picker */}
       <div className="rounded-lg border bg-card p-5 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <h3 className="font-semibold text-sm">Select Recipients</h3>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => setSelectedIds(new Set(withToken.map((u) => u.id)))}>
-              All with token ({withToken.length})
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => {
+                const targetsWithToken = filtered.filter((u) => !!u.fcmId).map((u) => u.id);
+                setSelectedIds(new Set(targetsWithToken));
+              }}
+            >
+              Select Filtered ({filtered.filter((u) => !!u.fcmId).length})
             </Button>
             {selectedIds.size > 0 && (
-              <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setSelectedIds(new Set())}>
+                Clear
+              </Button>
             )}
           </div>
         </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 h-8 text-sm" />
+
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search users..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+          <Select value={streamFilter} onValueChange={setStreamFilter}>
+            <SelectTrigger className="w-36 h-8 text-xs">
+              <SelectValue placeholder="All Streams" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Streams</SelectItem>
+              {streams.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
         <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
           ) : filtered.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">No users found</p>
           ) : (
             filtered.map((user) => {
               const selected = selectedIds.has(user.id);
               const hasToken = !!user.fcmId;
+              const streamName = user.streamId ? streamNameById.get(user.streamId) : null;
               return (
                 <button
                   key={user.id}
                   type="button"
                   onClick={() => toggleSelect(user.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-colors text-sm ${selected ? "bg-primary/10 border border-primary/30" : "hover:bg-muted/50 border border-transparent"}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-colors text-sm ${
+                    selected
+                      ? "bg-primary/10 border border-primary/30"
+                      : "hover:bg-muted/50 border border-transparent"
+                  }`}
                 >
                   <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
                     {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{user.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user.phoneNumber}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+                      <span>{user.phoneNumber}</span>
+                      {streamName && (
+                        <span className="text-[10px] bg-muted px-1.5 py-0.2 rounded font-medium text-foreground/80">
+                          {streamName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {hasToken ? (

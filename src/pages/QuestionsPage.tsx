@@ -31,6 +31,7 @@ import {
   type Stream,
   type Subject,
 } from "@/services/api/questions";
+import { MathText } from "@/components/MathText";
 
 const difficultyColors: Record<string, string> = {
   easy:   "bg-success/10 text-success border-success/20",
@@ -81,7 +82,7 @@ function downloadCsvTemplate(
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href     = url;
-  a.download = "learnova_questions_template.csv";
+  a.download = "scorenova_questions_template.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -477,7 +478,11 @@ const QuestionsPage = () => {
 
   const toggleSelect = (id: string) => {
     const next = new Set(selected);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
     setSelected(next);
   };
 
@@ -587,7 +592,9 @@ const QuestionsPage = () => {
                   <td className="p-3">
                     <Checkbox checked={selected.has(q.id)} onCheckedChange={() => toggleSelect(q.id)} />
                   </td>
-                  <td className="p-3 max-w-xs truncate">{q.text}</td>
+                  <td className="p-3 max-w-xs truncate">
+                    <MathText text={q.text} />
+                  </td>
                   <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{streamName}</td>
                   <td className="p-3 text-xs text-muted-foreground">{subjectName}</td>
                   <td className="p-3">

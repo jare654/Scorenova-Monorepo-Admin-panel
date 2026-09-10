@@ -12,6 +12,7 @@ import {
   type Subject, type Topic, type Stream,
 } from "@/services/api/content";
 import { fetchPracticeQuestions, type PracticeQuestion } from "@/services/api/practice";
+import { MathText } from "@/components/MathText";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -415,7 +416,9 @@ const PracticePage = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2 min-w-0">
                       <span className="text-xs text-muted-foreground font-mono shrink-0 pt-0.5">{(qPage - 1) * perPage + i + 1}.</span>
-                      <p className="text-sm font-medium">{q.questionText}</p>
+                      <div className="text-sm font-medium flex-1">
+                        <MathText text={q.questionText} />
+                      </div>
                     </div>
                     <Badge variant="outline" className={`shrink-0 text-xs ${diffClass[q.difficulty] ?? ""}`}>{q.difficulty || "—"}</Badge>
                   </div>
@@ -423,7 +426,9 @@ const PracticePage = () => {
                     {q.choices.map((choice, ci) => (
                       <div key={ci} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm border ${ci === q.correctIndex ? "bg-success/10 border-success/30 text-success font-medium" : "bg-muted/40 border-transparent text-muted-foreground"}`}>
                         <span className="text-xs font-mono shrink-0">{String.fromCharCode(65 + ci)}.</span>
-                        {choice}
+                        <div className="flex-1">
+                          <MathText text={choice} />
+                        </div>
                         {ci === q.correctIndex && <span className="ml-auto text-xs font-medium">✓</span>}
                       </div>
                     ))}

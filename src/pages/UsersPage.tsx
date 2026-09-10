@@ -854,7 +854,7 @@ const UsersPage = () => {
               </Label>
               <Input
                 id="notify-title"
-                placeholder={notifyChannel === "sms" ? "e.g. Learnova" : "Enter title..."}
+                placeholder={notifyChannel === "sms" ? "e.g. Scorenova" : "Enter title..."}
                 value={notifyTitle}
                 onChange={(e) => setNotifyTitle(e.target.value)}
               />

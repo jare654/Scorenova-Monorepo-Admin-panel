@@ -23,6 +23,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import EditProfilePage from "../src/pages/EditProfilePage";
 import NotificationTestPage from "./pages/NotificationTestPage";
 import ReportsPage from "./pages/ReportsPage";
+import FlaggedQuestionsPage from "./pages/FlaggedQuestionsPage";
 import { AccountsProvider } from "@/components/auth/context/Accountcontext";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -83,6 +84,7 @@ const App = () => (
                   <Route path="/change-password" element={<ChangePasswordPage />} />
                   <Route path="/notification-test" element={<NotificationTestPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/flagged-questions" element={<FlaggedQuestionsPage />} />
                 </Route>
 
                 <Route path="*" element={<NotFound />} />

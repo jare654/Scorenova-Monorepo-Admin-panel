@@ -12,6 +12,7 @@ import {
   Crown,
   BellRing,
   Flag,
+  MessageSquareWarning,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,16 +24,17 @@ import {
 } from "@/components/ui/sheet";
 
 const navItems = [
-  { title: "Dashboard",    path: "/dashboard",   icon: LayoutDashboard },
-  { title: "Question Bank",path: "/questions",   icon: FileQuestion },
-  { title: "Mock Exams",   path: "/mock-exams",  icon: BookOpen },
-  // { title: "Practice",     path: "/practice",    icon: Dumbbell },
-  { title: "Students",     path: "/users",       icon: Users },
-  { title: "Payments",     path: "/payments",    icon: CreditCard },
-  { title: "Analytics",    path: "/analytics",          icon: BarChart3 },
-  { title: "Reports",      path: "/reports",             icon: Flag },
-  { title: "Settings",     path: "/settings",            icon: Settings },
-  { title: "Notif. Test",  path: "/notification-test",   icon: BellRing },
+  { title: "Dashboard",        path: "/dashboard",        icon: LayoutDashboard },
+  { title: "Question Bank",    path: "/questions",        icon: FileQuestion },
+  { title: "Mock Exams",       path: "/mock-exams",       icon: BookOpen },
+  { title: "Practice",         path: "/practice",         icon: Dumbbell },
+  { title: "Flagged Questions",path: "/flagged-questions",icon: Flag },
+  { title: "Students",         path: "/users",            icon: Users },
+  { title: "Payments",         path: "/payments",         icon: CreditCard },
+  { title: "Analytics",        path: "/analytics",        icon: BarChart3 },
+  { title: "User Reports",     path: "/reports",          icon: MessageSquareWarning },
+  { title: "Settings",         path: "/settings",         icon: Settings },
+  { title: "Notif. Test",      path: "/notification-test",icon: BellRing },
 ];
 
 interface AppSidebarProps {
