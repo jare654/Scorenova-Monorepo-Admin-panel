@@ -112,15 +112,13 @@ function buildGrowthData(students: Account[]): UserGrowthPoint[] {
 }
 
 function buildStatusData(students: Account[]): StatusDataPoint[] {
-  const count = { free: 0, premium: 0, trial: 0 };
-  students.forEach((u) => {
-    const s = (u.status ?? "free").toLowerCase() as keyof typeof count;
-    if (s in count) count[s] += 1;
-  });
+  const premiumCount = students.filter(
+    (u) => Boolean(u.isPremium) || (u.status as string) === "premium"
+  ).length;
+  const freeCount = Math.max(0, students.length - premiumCount);
   return [
-    { name: "Premium", value: count.premium },
-    { name: "Free", value: count.free },
-    { name: "Trial", value: count.trial },
+    { name: "Free", value: freeCount },
+    { name: "Premium", value: premiumCount },
   ];
 }
 

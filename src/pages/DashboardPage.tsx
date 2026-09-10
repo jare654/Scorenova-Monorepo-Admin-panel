@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/services/api/client";
 import {
   Users,
   UserCheck,
@@ -25,7 +28,6 @@ import {
   Cell,
   BarChart,
   Bar,
-  Legend,
 } from "recharts";
 import { useAccounts } from "@/components/auth/context/Accountcontext";
 import { useGradeStats } from "@/hooks/Usegradestats";
@@ -58,6 +60,40 @@ const DashboardPage = () => {
 
   const { questionsByGrade, loading: gradeStatsLoading } = useGradeStats();
 
+  // ── Real Subscription / Users by Package data from backend ──
+  const { data: packageData, isLoading: packageLoading } = useQuery<{
+    premium?: number;
+    free?: number;
+    total?: number;
+  }>({
+    queryKey: ["analytics-users-by-package-dashboard"],
+    queryFn: async ({ signal }) => {
+      const res = await apiClient.get<any>("/analytics/users-by-package", signal);
+      return res?.data ?? res ?? {};
+    },
+    staleTime: 60_000,
+  });
+
+  const subscriptionData = useMemo(() => {
+    if (packageData && (packageData.free !== undefined || packageData.premium !== undefined)) {
+      const free = Number(packageData.free) || 0;
+      const premium = Number(packageData.premium) || 0;
+      return [
+        { name: "Free", value: free, color: "#2563eb" },
+        { name: "Premium", value: premium, color: "#f59e0b" },
+      ];
+    }
+
+    const premiumCount = students.filter((s) => s.isPremium || s.status === "premium").length;
+    const freeCount = Math.max(0, students.length - premiumCount);
+    return [
+      { name: "Free", value: freeCount, color: "#2563eb" },
+      { name: "Premium", value: premiumCount, color: "#f59e0b" },
+    ];
+  }, [packageData, students]);
+
+  const totalSubscribers = subscriptionData.reduce((acc, curr) => acc + curr.value, 0);
+
   const today = new Date();
   const activeStudentsCount    = students.filter((s) => s.isActive).length;
   const suspendedStudentsCount = students.filter((s) => !s.isActive).length;
@@ -66,6 +102,7 @@ const DashboardPage = () => {
     const d = new Date(s.createdAt ?? s.joinedAt);
     return d.toDateString() === today.toDateString();
   }).length;
+  const premiumCountDisplay = packageData?.premium !== undefined ? packageData.premium : premiumStudentsCount;
 
   // ── Monthly gender chart — all 12 months of current year, all students ──
   const monthlyGenderData = (() => {
@@ -174,7 +211,7 @@ const DashboardPage = () => {
         />
         <KPICard
           title="Premium Members"
-          value={accountsLoading ? "—" : premiumStudentsCount}
+          value={packageLoading && accountsLoading ? "—" : premiumCountDisplay}
           icon={Crown}
           iconColor="text-amber-500"
           badge="Subscribed"
@@ -252,7 +289,7 @@ const DashboardPage = () => {
           )}
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-border/70 bg-card p-5 shadow-xs space-y-4">
+        <div className="min-w-0 rounded-2xl border border-border/70 bg-card p-5 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="font-semibold text-sm sm:text-base text-foreground">
               Subscription Status
@@ -262,41 +299,72 @@ const DashboardPage = () => {
             </p>
           </div>
 
-          {accountsLoading || statusData.length === 0 ? (
+          {accountsLoading || packageLoading ? (
             <div className="flex h-[260px] items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={65}
-                  outerRadius={95}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {statusData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#ffffff",
-                    borderRadius: "10px",
-                    border: "1px solid #e2e8f0",
-                    fontSize: "12px",
-                  }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value) => <span className="text-xs text-foreground font-medium">{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="flex flex-col items-center">
+              <div className="h-[210px] w-full relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={subscriptionData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={62}
+                      outerRadius={90}
+                      paddingAngle={subscriptionData.filter((d) => d.value > 0).length > 1 ? 4 : 0}
+                      dataKey="value"
+                    >
+                      {subscriptionData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(val: any, name: any) => [
+                        `${Number(val)} accounts (${totalSubscribers > 0 ? ((Number(val) / totalSubscribers) * 100).toFixed(1) : 0}%)`,
+                        name,
+                      ]}
+                      contentStyle={{
+                        backgroundColor: "#0f172a",
+                        border: "none",
+                        borderRadius: "8px",
+                        color: "#fff",
+                        fontSize: "12px",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center metric inside donut */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-xl font-bold tracking-tight text-foreground">
+                    {totalSubscribers}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-medium">
+                    Total Enrolled
+                  </span>
+                </div>
+              </div>
+
+              {/* Clean Legend with explicit spacing and metrics */}
+              <div className="flex items-center justify-center gap-6 pt-3 border-t border-border/50 w-full mt-2">
+                {subscriptionData.map((item) => (
+                  <div key={item.name} className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <div className="flex items-baseline gap-1.5 text-xs">
+                      <span className="font-semibold text-foreground">{item.name}</span>
+                      <span className="text-muted-foreground font-mono text-[11px]">
+                        {item.value} ({totalSubscribers > 0 ? Math.round((item.value / totalSubscribers) * 100) : 0}%)
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
