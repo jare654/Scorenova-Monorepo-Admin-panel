@@ -57,7 +57,7 @@ const refreshToken = data?.refreshToken;
       const loggedInUser: AdminUser = {
         id: data?.profile?.id || "admin",
         name: data?.profile?.name || "Admin",
-        email: data?.profile?.email || "admin@examapp.com",
+        email: data?.profile?.email || "admin@scorenova.et",
         role: data?.profile?.currentRole?.name || "Super Admin",
         lastLogin: new Date().toISOString(),
       };
