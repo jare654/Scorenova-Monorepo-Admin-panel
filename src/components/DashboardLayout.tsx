@@ -4,17 +4,22 @@ import AppSidebar from "@/components/AppSidebar";
 import AppHeader from "@/components/AppHeader";
 import { cn } from "@/lib/utils";
 
-const pageTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/questions": "Question Bank",
-  "/questions/new": "Add Question",
-  "/users": "Students",
-  "/payments": "Payments",
-  "/analytics": "Analytics",
-  "/settings": "Settings",
-  "/admin-profile": "Profile",
-  "/edit-profile": "Edit Profile",
-  "/change-password": "Change Password",
+const routeMeta: Record<string, { title: string; section: string }> = {
+  "/dashboard":          { title: "Overview Dashboard",     section: "Core" },
+  "/analytics":          { title: "Platform Analytics",     section: "Core" },
+  "/questions":          { title: "Question Bank",         section: "Curriculum" },
+  "/questions/new":      { title: "Add New Question",      section: "Curriculum" },
+  "/mock-exams":         { title: "Mock Exams",            section: "Curriculum" },
+  "/practice":           { title: "Curriculum Practice",   section: "Curriculum" },
+  "/flagged-questions":  { title: "Flagged Questions",     section: "Curriculum" },
+  "/users":              { title: "Students Management",   section: "Management" },
+  "/payments":           { title: "Transactions & Revenue",section: "Management" },
+  "/reports":            { title: "User Feedback & Reports",section: "Management" },
+  "/settings":           { title: "System Settings",       section: "System" },
+  "/notification-test":  { title: "Push Notifications",    section: "System" },
+  "/admin-profile":      { title: "Admin Profile",         section: "Account" },
+  "/edit-profile":       { title: "Edit Profile",          section: "Account" },
+  "/change-password":    { title: "Change Password",       section: "Account" },
 };
 
 const DashboardLayout = () => {
@@ -22,10 +27,13 @@ const DashboardLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  const title = pageTitles[location.pathname] ?? "Dashboard";
+  const current = routeMeta[location.pathname] ?? {
+    title: "Scorenova Admin",
+    section: "Portal",
+  };
 
   return (
-    <div className="min-h-screen bg-background flex overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground flex overflow-x-hidden">
       {/* Sidebar */}
       <AppSidebar
         collapsed={collapsed}
@@ -42,7 +50,8 @@ const DashboardLayout = () => {
         )}
       >
         <AppHeader
-          title={title}
+          title={current.title}
+          section={current.section}
           onMenuClick={() => setMobileOpen((prev) => !prev)}
         />
         <main className="flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8">

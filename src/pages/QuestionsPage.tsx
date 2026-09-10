@@ -490,159 +490,259 @@ const QuestionsPage = () => {
     setSelected(selected.size === questions.length ? new Set() : new Set(questions.map((q) => q.id)));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
 
-      {/* ── Filters ── */}
-      <div className="flex flex-wrap lg:flex-nowrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search questions..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="pl-9"
-          />
+      {/* ── Top Metrics Ribbon ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Question Bank</span>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-foreground">{loading ? "—" : total.toLocaleString()}</p>
+          <span className="text-[11px] text-muted-foreground">National Exam Items</span>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Curriculum Streams</span>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-foreground">{streams.length || 2}</p>
+          <span className="text-[11px] text-muted-foreground">Natural & Social Science</span>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Active Subjects</span>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-foreground">{subjectsAll.length || 10}</p>
+          <span className="text-[11px] text-muted-foreground">Across both streams</span>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Page Items</span>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-foreground">{questions.length}</p>
+          <span className="text-[11px] text-muted-foreground">Items in current view</span>
+        </div>
+      </div>
+
+      {/* ── Filters & Actions Toolbar ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card p-3 sm:p-4 shadow-xs">
+        <div className="flex flex-1 flex-wrap items-center gap-2.5 min-w-[240px]">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search question text or math formulas..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="pl-9 pr-8 h-9 text-xs"
+            />
+            {search && (
+              <button
+                onClick={() => { setSearch(""); setPage(1); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Stream */}
+          <Select value={streamFilter} onValueChange={(v) => { setStreamFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-40 h-9 text-xs font-medium">
+              <SelectValue placeholder={streamsLoading ? "Loading..." : "All Streams"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Streams</SelectItem>
+              {streams.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Subject */}
+          <Select value={subjectFilter} onValueChange={(v) => { setSubjectFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-40 h-9 text-xs font-medium">
+              <SelectValue placeholder={subjectsLoading ? "Loading..." : "All Subjects"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Subjects</SelectItem>
+              {subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Difficulty */}
+          <Select value={difficultyFilter} onValueChange={(v) => { setDifficultyFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-32 h-9 text-xs font-medium">
+              <SelectValue placeholder="Difficulty" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Difficulties</SelectItem>
+              <SelectItem value="easy">Easy</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="hard">Hard</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <Select value={streamFilter} onValueChange={(v) => { setStreamFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder={streamsLoading ? "Loading..." : "Stream"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Streams</SelectItem>
-            {streams.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 text-xs shadow-xs"
+            onClick={() => setUploadModalOpen(true)}
+          >
+            <Upload className="h-3.5 w-3.5 text-muted-foreground" /> Import CSV
+          </Button>
 
-        <Select value={subjectFilter} onValueChange={(v) => { setSubjectFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder={subjectsLoading ? "Loading..." : "Subject"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Subjects</SelectItem>
-            {subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-
-        <Select value={difficultyFilter} onValueChange={(v) => { setDifficultyFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Difficulty" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="easy">Easy</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="hard">Hard</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Import button — opens modal */}
-        <Button variant="outline" onClick={() => setUploadModalOpen(true)}>
-          <Upload className="h-4 w-4 mr-1" /> Import CSV/Excel
-        </Button>
-
-        <Button onClick={() => navigate("/questions/new")}>
-          <Plus className="h-4 w-4 mr-1" /> Add New
-        </Button>
+          <Button
+            size="sm"
+            className="h-9 gap-1.5 text-xs shadow-xs"
+            onClick={() => navigate("/questions/new")}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Question
+          </Button>
+        </div>
       </div>
 
       {/* ── Bulk actions ── */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-muted p-3 rounded-lg">
-          <span className="text-sm font-medium">{selected.size} selected</span>
-          <Button variant="destructive" size="sm" onClick={() => setBulkDeleteDialog(true)}>
-            <Trash2 className="h-4 w-4 mr-1" /> Delete
+        <div className="flex items-center justify-between rounded-xl bg-primary/10 border border-primary/20 p-3 animate-slide-in">
+          <span className="text-xs font-semibold text-primary">
+            {selected.size} question{selected.size > 1 ? "s" : ""} selected for bulk action
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setBulkDeleteDialog(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete Selected
           </Button>
         </div>
       )}
 
-      {/* ── Table ── */}
-      <div className="bg-card rounded-lg border shadow-sm overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="p-3 w-10">
-                <Checkbox
-                  checked={selected.size === questions.length && questions.length > 0}
-                  onCheckedChange={toggleAll}
-                />
-              </th>
-              <th className="p-3 text-left font-medium text-muted-foreground">Question</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">Stream</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">Subject</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">Difficulty</th>
-              <th className="p-3 text-left font-medium text-muted-foreground">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="p-8 text-center">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-              </td></tr>
-            ) : questions.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">
-                No questions found.
-              </td></tr>
-            ) : questions.map((q) => {
-              const subjectName = q.subjectName ?? subjectNameById.get(q.subjectId ?? "") ?? "—";
-              const streamId = subjectStreamIdById.get(q.subjectId ?? "");
-              const streamName = streamId ? (streamNameById.get(streamId) ?? "—") : "—";
-              return (
-                <tr key={q.id} className="border-b hover:bg-muted/30 transition-colors">
-                  <td className="p-3">
-                    <Checkbox checked={selected.has(q.id)} onCheckedChange={() => toggleSelect(q.id)} />
-                  </td>
-                  <td className="p-3 max-w-xs truncate">
-                    <MathText text={q.text} />
-                  </td>
-                  <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{streamName}</td>
-                  <td className="p-3 text-xs text-muted-foreground">{subjectName}</td>
-                  <td className="p-3">
-                    <Badge variant="outline" className={difficultyColors[q.difficulty] ?? ""}>
-                      {q.difficulty || "—"}
-                    </Badge>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8"
-                        onClick={async () => {
-                          try {
-                            const full = await fetchQuestionById(q.id);
-                            navigate("/questions/new", { state: { question: full, isEdit: true } });
-                          } catch {
-                            toast({ title: "Error", description: "Failed to load question for editing.", variant: "destructive" });
-                          }
-                        }}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"
-                        onClick={() => { setQuestionToDelete(q); setDeleteDialog(true); }}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+      {/* ── Modern Table ── */}
+      <div className="rounded-2xl border border-border/70 bg-card shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-border/60 bg-muted/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="py-3 px-4 w-10">
+                  <Checkbox
+                    checked={selected.size === questions.length && questions.length > 0}
+                    onCheckedChange={toggleAll}
+                  />
+                </th>
+                <th className="py-3 px-4">Question</th>
+                <th className="py-3 px-4">Stream</th>
+                <th className="py-3 px-4">Subject</th>
+                <th className="py-3 px-4">Difficulty</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                    <p className="text-xs text-muted-foreground mt-2">Loading national exam questions...</p>
                   </td>
                 </tr>
+              ) : questions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center text-muted-foreground">
+                    <p className="text-sm font-semibold text-foreground">No questions found</p>
+                    <p className="text-xs text-muted-foreground mt-1">Try refining your search terms or filter selection.</p>
+                  </td>
+                </tr>
+              ) : (
+                questions.map((q) => {
+                  const subjectName = q.subjectName ?? subjectNameById.get(q.subjectId ?? "") ?? "—";
+                  const streamId = subjectStreamIdById.get(q.subjectId ?? "");
+                  const streamName = streamId ? (streamNameById.get(streamId) ?? "—") : "—";
+                  const isNatural = streamName.toLowerCase().includes("natural");
+                  const isSocial = streamName.toLowerCase().includes("social");
+
+                  return (
+                    <tr key={q.id} className="group hover:bg-muted/40 transition-colors">
+                      <td className="py-3 px-4">
+                        <Checkbox checked={selected.has(q.id)} onCheckedChange={() => toggleSelect(q.id)} />
+                      </td>
+                      <td className="py-3 px-4 max-w-md font-medium text-foreground">
+                        <div className="line-clamp-2">
+                          <MathText text={q.text} />
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold",
+                            isNatural
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                              : isSocial
+                                ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20"
+                                : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {streamName}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground font-medium whitespace-nowrap">
+                        {subjectName}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant="outline" className={cn("text-[10px] uppercase font-bold", difficultyColors[q.difficulty] ?? "")}>
+                          {q.difficulty || "medium"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={async () => {
+                              try {
+                                const full = await fetchQuestionById(q.id);
+                                navigate("/questions/new", { state: { question: full, isEdit: true } });
+                              } catch {
+                                toast({ title: "Error", description: "Failed to load question for editing.", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => { setQuestionToDelete(q); setDeleteDialog(true); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Pagination ── */}
+        <div className="flex items-center justify-between border-t border-border/60 px-4 py-3 bg-card">
+          <p className="text-xs text-muted-foreground">
+            {total === 0 ? "No questions matching criteria" : `Showing ${(page - 1) * perPage + 1}–${Math.min(page * perPage, total)} of ${total.toLocaleString()} questions`}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" className="h-8 text-xs" disabled={page === 1} onClick={() => setPage(page - 1)}>
+              Previous
+            </Button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const p = page <= 3 ? i + 1 : page - 2 + i;
+              if (p > totalPages) return null;
+              return (
+                <Button key={p} variant={p === page ? "default" : "outline"} size="sm" className="h-8 w-8 p-0 text-xs" onClick={() => setPage(p)}>
+                  {p}
+                </Button>
               );
             })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── Pagination ── */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {total === 0 ? "No results" : `Showing ${(page - 1) * perPage + 1}–${Math.min(page * perPage, total)} of ${total}`}
-        </p>
-        <div className="flex gap-1">
-          <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            const p = page <= 3 ? i + 1 : page - 2 + i;
-            if (p > totalPages) return null;
-            return (
-              <Button key={p} variant={p === page ? "default" : "outline"} size="sm" onClick={() => setPage(p)}>{p}</Button>
-            );
-          })}
-          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+              Next
+            </Button>
+          </div>
         </div>
       </div>
 
