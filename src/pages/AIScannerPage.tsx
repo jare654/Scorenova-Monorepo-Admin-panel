@@ -566,7 +566,7 @@ export default function AIScannerPage() {
                 <span className="h-2 w-2 rounded-full bg-blue-500" /> Success
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber-500" /> Auto-Filtered
+                <span className="h-2 w-2 rounded-full bg-purple-500" /> Auto-Filtered
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-rose-500" /> Errors
@@ -585,11 +585,19 @@ export default function AIScannerPage() {
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="scanFiltered" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#a855f7" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.6} />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <Tooltip
+                  formatter={(value: any, name: any) => {
+                    const label = name === "success" ? "Success" : name === "nonQuestion" ? "Auto-Filtered" : "Errors";
+                    return [value, label];
+                  }}
                   contentStyle={{
                     backgroundColor: "#0f172a",
                     border: "none",
@@ -598,9 +606,9 @@ export default function AIScannerPage() {
                     fontSize: "12px",
                   }}
                 />
-                <Area type="monotone" dataKey="success" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#scanSuccess)" />
-                <Area type="monotone" dataKey="nonQuestion" stroke="#f59e0b" strokeWidth={1.5} fillOpacity={0} />
-                <Area type="monotone" dataKey="failed" stroke="#ef4444" strokeWidth={1.5} fillOpacity={0} />
+                <Area type="monotone" name="Success" dataKey="success" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#scanSuccess)" />
+                <Area type="monotone" name="Auto-Filtered" dataKey="nonQuestion" stroke="#a855f7" strokeWidth={2} fillOpacity={1} fill="url(#scanFiltered)" />
+                <Area type="monotone" name="Errors" dataKey="failed" stroke="#ef4444" strokeWidth={2} fillOpacity={0} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -705,14 +713,18 @@ export default function AIScannerPage() {
                   variant="outline"
                   className={cn(
                     "text-[10px] font-bold uppercase",
-                    testResult.isQuestion !== false && testResult.success !== false
+                    testResult.isQuestion !== false && testResult.success !== false && !testResult.error
                       ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                      : "bg-rose-500/10 text-rose-600 border-rose-500/20",
+                      : testResult.error
+                        ? "bg-rose-500/10 text-rose-600 border-rose-500/20"
+                        : "bg-purple-500/10 text-purple-600 border-purple-500/20",
                   )}
                 >
-                  {testResult.isQuestion !== false && testResult.success !== false
+                  {testResult.isQuestion !== false && testResult.success !== false && !testResult.error
                     ? "Valid Question"
-                    : "Filtered / Rejected"}
+                    : testResult.error
+                      ? "Error / Timeout"
+                      : "Auto-Filtered"}
                 </Badge>
               </div>
 
@@ -818,8 +830,8 @@ export default function AIScannerPage() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="error">Error / Report</SelectItem>
+                <SelectItem value="rejected">Auto-Filtered</SelectItem>
+                <SelectItem value="error">Errors / Reports</SelectItem>
               </SelectContent>
             </Select>
 
@@ -892,11 +904,11 @@ export default function AIScannerPage() {
                       className={cn(
                         "text-[10px] font-bold uppercase",
                         log.status === "success" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-                        log.status === "rejected" && "bg-amber-500/10 text-amber-600 border-amber-500/20",
+                        log.status === "rejected" && "bg-purple-500/10 text-purple-600 border-purple-500/20",
                         log.status === "error" && "bg-rose-500/10 text-rose-600 border-rose-500/20",
                       )}
                     >
-                      {log.status === "error" ? "Failure" : log.status}
+                      {log.status === "error" ? "Failure" : log.status === "rejected" ? "Filtered" : "Success"}
                     </Badge>
                   </td>
                   <td className="py-3 px-4 text-muted-foreground whitespace-nowrap font-mono text-[11px]">
