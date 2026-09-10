@@ -14,7 +14,7 @@ export interface ApiClientOptions {
   retryDelayMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 45000;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const retryStatuses = new Set([429, 502, 503, 504]);
