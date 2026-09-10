@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Plus,
   AlertTriangle,
@@ -447,6 +447,8 @@ const PremiumSettingsSection = () => {
 
 const SettingsPage = () => {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "general";
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
@@ -550,7 +552,7 @@ const SettingsPage = () => {
 
   return (
     <div className="max-w-4xl">
-      <Tabs defaultValue="general">
+      <Tabs value={activeTab} onValueChange={(val) => setSearchParams({ tab: val })}>
         <TabsList className="mb-6 flex-wrap h-auto">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>

@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Crown, Search, Loader2, TrendingUp, Users, DollarSign } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { Crown, Search, Loader2, TrendingUp, Users, DollarSign, Settings, Sparkles, ExternalLink, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -426,6 +427,64 @@ const PaymentsPage = () => {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Live Mobile Paywall Plans Ribbon */}
+      <div className="rounded-xl border bg-card p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">
+                Mobile App Subscription Plans (Live Paywall)
+              </h3>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              These subscription plans are dynamically served to the mobile app paywall via{" "}
+              <code className="text-[11px] font-mono bg-muted px-1 py-0.5 rounded">GET /api/v1/settings/plans</code>.
+            </p>
+          </div>
+          <Link to="/settings?tab=payments">
+            <Button variant="outline" size="sm" className="h-8 text-xs shrink-0">
+              <Settings className="h-3.5 w-3.5 mr-1.5" />
+              Configure Plans & Pricing
+            </Button>
+          </Link>
+        </div>
+
+        {/* Plan Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(plansData?.plans ?? [
+            { id: "monthly", label: "Monthly", price: monthlyPrice, durationDays: 30 },
+            { id: "quarterly", label: "Quarterly", price: 900, durationDays: 90, savings: 10 },
+            { id: "annual", label: "Annual", price: 3000, durationDays: 365, savings: 25, badge: "Best value" },
+          ]).map((p: any) => (
+            <div
+              key={p.id}
+              className="rounded-lg border bg-muted/20 p-3 flex items-center justify-between gap-2"
+            >
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-foreground">{p.label}</span>
+                  {p.badge && (
+                    <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 font-normal">
+                      {p.badge}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {p.durationDays ?? 30} days duration
+                  {p.savings ? ` • Save ${p.savings}%` : ""}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-primary">
+                  {p.price != null ? Number(p.price).toLocaleString() : "—"}{" "}
+                  <span className="text-[10px] font-normal text-muted-foreground">{currency}</span>
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
