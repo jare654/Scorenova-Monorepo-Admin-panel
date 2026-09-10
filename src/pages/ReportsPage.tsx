@@ -118,9 +118,9 @@ const ReportsPage = () => {
   const filtered = search
     ? reports.filter(
         (r) =>
-          r.studentName.toLowerCase().includes(search.toLowerCase()) ||
-          r.studentPhone.includes(search) ||
-          r.description.toLowerCase().includes(search.toLowerCase()),
+          (r.studentName || "").toLowerCase().includes(search.toLowerCase()) ||
+          (r.studentPhone || "").includes(search) ||
+          (r.description || "").toLowerCase().includes(search.toLowerCase()),
       )
     : reports;
 
