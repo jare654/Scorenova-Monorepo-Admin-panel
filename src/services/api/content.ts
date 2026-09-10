@@ -17,6 +17,8 @@ export interface Subject {
   name: string;
   description: string | null;
   streamId: string | null;
+  isFree?: boolean;
+  accessType?: "free" | "paid" | string;
 }
 
 export interface Topic {
@@ -100,6 +102,14 @@ export async function updateSubject(
 
 export async function deleteSubject(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/subjects/${id}`);
+}
+
+export async function updateSubjectAccess(
+  id: string,
+  data: { isFree?: boolean; accessType?: "free" | "paid" },
+): Promise<Subject> {
+  const payload = await apiClient.patch<unknown>(`/subjects/${id}/access`, data);
+  return one<Subject>(payload);
 }
 
 // ─── Topics ───────────────────────────────────────────────────────────────────

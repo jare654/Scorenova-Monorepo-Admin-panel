@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Plus, Pencil, Trash2, Search, Loader2, ChevronRight,
-  ChevronLeft, BookOpen, Hash, FileQuestion, X,
+  ChevronLeft, BookOpen, Hash, FileQuestion, Lock, Globe,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import {
-  fetchSubjects, createSubject, updateSubject, deleteSubject,
+  fetchSubjects, createSubject, updateSubject, deleteSubject, updateSubjectAccess,
   fetchTopics,   createTopic,   updateTopic,   deleteTopic,
   fetchStreams,
   type Subject, type Topic, type Stream,
@@ -16,9 +17,9 @@ import { MathText } from "@/components/MathText";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -48,18 +49,25 @@ interface SubjectFormProps {
   onClose: () => void;
   streams: Stream[];
   initial?: Subject | null;
-  onSave: (data: { name: string; description: string; streamId: string }) => void;
+  onSave: (data: { name: string; description: string; streamId: string; isFree?: boolean; accessType?: "free" | "paid" }) => void;
   saving: boolean;
 }
 const SubjectFormDialog = ({ open, onClose, streams, initial, onSave, saving }: SubjectFormProps) => {
   const [name, setName]         = useState(initial?.name ?? "");
   const [desc, setDesc]         = useState(initial?.description ?? "");
   const [streamId, setStreamId] = useState(initial?.streamId ?? "");
+  const [isFree, setIsFree]     = useState(initial?.isFree ?? false);
 
   // reset when dialog opens
   const handleOpen = (v: boolean) => {
-    if (v) { setName(initial?.name ?? ""); setDesc(initial?.description ?? ""); setStreamId(initial?.streamId ?? ""); }
-    else onClose();
+    if (v) {
+      setName(initial?.name ?? "");
+      setDesc(initial?.description ?? "");
+      setStreamId(initial?.streamId ?? "");
+      setIsFree(initial?.isFree ?? false);
+    } else {
+      onClose();
+    }
   };
 
   return (
@@ -89,10 +97,26 @@ const SubjectFormDialog = ({ open, onClose, streams, initial, onSave, saving }: 
             <Label htmlFor="s-desc">Description</Label>
             <Textarea id="s-desc" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} placeholder="Optional description" />
           </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Free Access</Label>
+              <p className="text-xs text-muted-foreground">Allow students to practice this subject without a paid subscription</p>
+            </div>
+            <Switch checked={isFree} onCheckedChange={setIsFree} />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={() => onSave({ name: name.trim(), description: desc.trim(), streamId })} disabled={!name.trim() || !streamId || saving}>
+          <Button
+            onClick={() => onSave({
+              name: name.trim(),
+              description: desc.trim(),
+              streamId,
+              isFree,
+              accessType: isFree ? "free" : "paid",
+            })}
+            disabled={!name.trim() || !streamId || saving}
+          >
             {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Saving…</> : "Save"}
           </Button>
         </DialogFooter>
@@ -155,17 +179,24 @@ const PracticePage = () => {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [view, setView]                       = useState<View>("subjects");
-  const [search, setSearch]                   = useState("");
-  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [selectedTopic, setSelectedTopic]     = useState<Topic | null>(null);
-  const [qPage, setQPage]                     = useState(1);
-  const perPage = 10;
+  // URL search params for state synchronization and deep linking
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewParam = searchParams.get("view") as View | null;
+  const subjectIdParam = searchParams.get("subjectId");
+  const topicIdParam = searchParams.get("topicId");
+  const pageParam = parseInt(searchParams.get("page") || "1", 10) || 1;
+
+  const view: View = viewParam || (topicIdParam ? "questions" : subjectIdParam ? "topics" : "subjects");
+  const qPage = pageParam;
+
+  const [search, setSearch] = useState("");
 
   // dialogs
   const [subjectForm, setSubjectForm]   = useState<{ open: boolean; edit: Subject | null }>({ open: false, edit: null });
   const [topicForm, setTopicForm]       = useState<{ open: boolean; edit: Topic | null }>({ open: false, edit: null });
   const [deleteTarget, setDeleteTarget] = useState<{ type: "subject" | "topic"; id: string; name: string } | null>(null);
+
+  const perPage = 10;
 
   // ── Streams
   const { data: streams = [] } = useQuery<Stream[], Error>({
@@ -184,19 +215,29 @@ const PracticePage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  const selectedSubject = useMemo(
+    () => (subjectIdParam ? subjects.find((s) => s.id === subjectIdParam) ?? null : null),
+    [subjects, subjectIdParam]
+  );
+
   // ── Topics
   const { data: topics = [], isLoading: topicsLoading } = useQuery<Topic[], Error>({
-    queryKey: ["topics", selectedSubject?.id],
-    queryFn: ({ signal }) => fetchTopics(selectedSubject!.id, signal),
-    enabled: initialized && !!token && view === "topics" && !!selectedSubject,
+    queryKey: ["topics", subjectIdParam],
+    queryFn: ({ signal }) => fetchTopics(subjectIdParam!, signal),
+    enabled: initialized && !!token && !!subjectIdParam,
     staleTime: 5 * 60 * 1000,
   });
 
+  const selectedTopic = useMemo(
+    () => (topicIdParam ? topics.find((t) => t.id === topicIdParam) ?? null : null),
+    [topics, topicIdParam]
+  );
+
   // ── Questions
   const { data: questionsData, isLoading: questionsLoading } = useQuery({
-    queryKey: ["practice-questions", selectedTopic?.id, qPage],
-    queryFn: ({ signal }) => fetchPracticeQuestions(selectedTopic!.id, qPage, perPage, signal),
-    enabled: initialized && !!token && view === "questions" && !!selectedTopic,
+    queryKey: ["practice-questions", topicIdParam, qPage],
+    queryFn: ({ signal }) => fetchPracticeQuestions(topicIdParam!, qPage, perPage, signal),
+    enabled: initialized && !!token && view === "questions" && !!topicIdParam,
     staleTime: 2 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -206,44 +247,117 @@ const PracticePage = () => {
 
   // ── Subject mutations
   const createSubjectMutation = useMutation({
-    mutationFn: (d: { name: string; description: string; streamId: string }) => createSubject(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); toast({ title: "Subject created" }); setSubjectForm({ open: false, edit: null }); },
+    mutationFn: (d: { name: string; description: string; streamId: string; isFree?: boolean; accessType?: string }) => createSubject(d),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      toast({ title: "Subject created" });
+      setSubjectForm({ open: false, edit: null });
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
   const updateSubjectMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name: string; description: string; streamId: string } }) => updateSubject(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); toast({ title: "Subject updated" }); setSubjectForm({ open: false, edit: null }); },
+    mutationFn: ({ id, data }: { id: string; data: { name: string; description: string; streamId: string; isFree?: boolean; accessType?: string } }) =>
+      updateSubject(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      toast({ title: "Subject updated" });
+      setSubjectForm({ open: false, edit: null });
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const toggleAccessMutation = useMutation({
+    mutationFn: ({ id, isFree, accessType }: { id: string; isFree: boolean; accessType: "free" | "paid" }) =>
+      updateSubjectAccess(id, { isFree, accessType }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      toast({
+        title: "Access Updated",
+        description: `Subject marked as ${vars.isFree ? "Free for all students" : "Paid subscription required"}.`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Failed to update access", description: e.message, variant: "destructive" }),
+  });
+
   const deleteSubjectMutation = useMutation({
     mutationFn: (id: string) => deleteSubject(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subjects"] }); toast({ title: "Subject deleted" }); setDeleteTarget(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subjects"] });
+      toast({ title: "Subject deleted" });
+      setDeleteTarget(null);
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   // ── Topic mutations
   const createTopicMutation = useMutation({
-    mutationFn: (d: { name: string; description: string }) => createTopic({ ...d, subjectId: selectedSubject!.id }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["topics", selectedSubject?.id] }); toast({ title: "Topic created" }); setTopicForm({ open: false, edit: null }); },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-  const updateTopicMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name: string; description: string } }) => updateTopic(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["topics", selectedSubject?.id] }); toast({ title: "Topic updated" }); setTopicForm({ open: false, edit: null }); },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-  const deleteTopicMutation = useMutation({
-    mutationFn: (id: string) => deleteTopic(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["topics", selectedSubject?.id] }); toast({ title: "Topic deleted" }); setDeleteTarget(null); },
+    mutationFn: (d: { name: string; description: string }) => createTopic({ ...d, subjectId: subjectIdParam! }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["topics", subjectIdParam] });
+      toast({ title: "Topic created" });
+      setTopicForm({ open: false, edit: null });
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  // ── Navigation
-  const goToTopics = (subject: Subject) => { setSelectedSubject(subject); setSearch(""); setView("topics"); };
-  const goToQuestions = (topic: Topic) => { setSelectedTopic(topic); setSearch(""); setQPage(1); setView("questions"); };
+  const updateTopicMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name: string; description: string } }) => updateTopic(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["topics", subjectIdParam] });
+      toast({ title: "Topic updated" });
+      setTopicForm({ open: false, edit: null });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteTopicMutation = useMutation({
+    mutationFn: (id: string) => deleteTopic(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["topics", subjectIdParam] });
+      toast({ title: "Topic deleted" });
+      setDeleteTarget(null);
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  // ── Navigation helpers
+  const goToSubjects = () => {
+    setSearchParams({});
+    setSearch("");
+  };
+
+  const goToTopics = (subject: Subject) => {
+    setSearchParams({ view: "topics", subjectId: subject.id });
+    setSearch("");
+  };
+
+  const goToQuestions = (topic: Topic) => {
+    setSearchParams({
+      view: "questions",
+      subjectId: topic.subjectId || subjectIdParam || "",
+      topicId: topic.id,
+      page: "1",
+    });
+    setSearch("");
+  };
+
   const goBack = () => {
-    if (view === "questions") { setView("topics"); setSearch(""); }
-    else if (view === "topics") { setView("subjects"); setSearch(""); setSelectedSubject(null); }
+    if (view === "questions") {
+      setSearchParams({ view: "topics", subjectId: subjectIdParam || "" });
+      setSearch("");
+    } else if (view === "topics") {
+      goToSubjects();
+    }
+  };
+
+  const setQPage = (newPage: number) => {
+    setSearchParams({
+      view: "questions",
+      subjectId: subjectIdParam || "",
+      topicId: topicIdParam || "",
+      page: String(newPage),
+    });
   };
 
   const filteredSubjects = subjects.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
@@ -258,15 +372,15 @@ const PracticePage = () => {
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Practice</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage subjects, topics, and browse practice questions.</p>
+          <h2 className="text-lg font-semibold">Practice Curriculum</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage subjects, topics, and practice questions for students.</p>
         </div>
         {view === "subjects" && (
           <Button onClick={() => setSubjectForm({ open: true, edit: null })}>
             <Plus className="h-4 w-4 mr-1" /> New Subject
           </Button>
         )}
-        {view === "topics" && (
+        {view === "topics" && selectedSubject && (
           <Button onClick={() => setTopicForm({ open: true, edit: null })}>
             <Plus className="h-4 w-4 mr-1" /> New Topic
           </Button>
@@ -281,9 +395,29 @@ const PracticePage = () => {
           </Button>
         )}
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <button onClick={() => { setView("subjects"); setSearch(""); setSelectedSubject(null); setSelectedTopic(null); }} className="hover:text-foreground transition-colors">Practice</button>
-          {selectedSubject && (<><ChevronRight className="h-3.5 w-3.5" /><button onClick={() => { setView("topics"); setSearch(""); setSelectedTopic(null); }} className={view === "topics" ? "text-foreground font-medium" : "hover:text-foreground transition-colors"}>{selectedSubject.name}</button></>)}
-          {selectedTopic && (<><ChevronRight className="h-3.5 w-3.5" /><span className="text-foreground font-medium">{selectedTopic.name}</span></>)}
+          <button
+            onClick={goToSubjects}
+            className={`hover:text-foreground transition-colors ${view === "subjects" ? "text-foreground font-semibold" : ""}`}
+          >
+            Subjects
+          </button>
+          {selectedSubject && (
+            <>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <button
+                onClick={() => goToTopics(selectedSubject)}
+                className={`hover:text-foreground transition-colors ${view === "topics" ? "text-foreground font-semibold" : ""}`}
+              >
+                {selectedSubject.name}
+              </button>
+            </>
+          )}
+          {selectedTopic && (
+            <>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-foreground font-semibold">{selectedTopic.name}</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -291,7 +425,12 @@ const PracticePage = () => {
       {view !== "questions" && (
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder={view === "subjects" ? "Search subjects…" : "Search topics…"} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input
+            placeholder={view === "subjects" ? "Search subjects…" : "Search topics…"}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
       )}
 
@@ -311,39 +450,72 @@ const PracticePage = () => {
                 <tr className="border-b bg-muted/50">
                   <th className="p-3 text-left font-medium text-muted-foreground">Subject</th>
                   <th className="p-3 text-left font-medium text-muted-foreground">Stream</th>
+                  <th className="p-3 text-left font-medium text-muted-foreground">Access</th>
                   <th className="p-3 text-left font-medium text-muted-foreground">Description</th>
                   <th className="p-3 text-left font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredSubjects.map((subject) => (
-                  <tr key={subject.id} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="p-3">
-                      <button onClick={() => goToTopics(subject)} className="font-medium hover:text-primary transition-colors text-left">
-                        {subject.name}
-                      </button>
-                    </td>
-                    <td className="p-3">
-                      <Badge variant="outline" className="text-xs">
-                        {subject.streamId ? (streamNameById.get(subject.streamId) ?? "—") : "All Streams"}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground max-w-xs truncate">{subject.description || "—"}</td>
-                    <td className="p-3">
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSubjectForm({ open: true, edit: subject })}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget({ type: "subject", id: subject.id, name: subject.name })}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => goToTopics(subject)}>
-                          Topics <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredSubjects.map((subject) => {
+                  const isFree = Boolean(subject.isFree || subject.accessType === "free");
+                  return (
+                    <tr key={subject.id} className="border-b hover:bg-muted/30 transition-colors">
+                      <td className="p-3">
+                        <button onClick={() => goToTopics(subject)} className="font-medium hover:text-primary transition-colors text-left">
+                          {subject.name}
+                        </button>
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="outline" className="text-xs">
+                          {subject.streamId ? (streamNameById.get(subject.streamId) ?? "—") : "All Streams"}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={isFree}
+                            disabled={toggleAccessMutation.isPending}
+                            onCheckedChange={(checked) => {
+                              toggleAccessMutation.mutate({
+                                id: subject.id,
+                                isFree: checked,
+                                accessType: checked ? "free" : "paid",
+                              });
+                            }}
+                          />
+                          <Badge
+                            variant="outline"
+                            className={`text-xs flex items-center gap-1 ${
+                              isFree
+                                ? "bg-success/10 text-success border-success/30"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {isFree ? (
+                              <><Globe className="h-3 w-3" /> Free</>
+                            ) : (
+                              <><Lock className="h-3 w-3" /> Premium</>
+                            )}
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground max-w-xs truncate">{subject.description || "—"}</td>
+                      <td className="p-3">
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSubjectForm({ open: true, edit: subject })}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget({ type: "subject", id: subject.id, name: subject.name })}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => goToTopics(subject)}>
+                            Topics <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -357,7 +529,7 @@ const PracticePage = () => {
         ) : filteredTopics.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Hash className="h-10 w-10 mb-3 opacity-30" />
-            <p className="text-sm">{search ? "No topics match your search." : "No topics yet. Create one to get started."}</p>
+            <p className="text-sm">{search ? "No topics match your search." : "No topics yet in this subject. Create one to get started."}</p>
           </div>
         ) : (
           <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
@@ -406,7 +578,7 @@ const PracticePage = () => {
         ) : questions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <FileQuestion className="h-10 w-10 mb-3 opacity-30" />
-            <p className="text-sm">No questions found for this topic.</p>
+            <p className="text-sm">No practice questions found for this topic.</p>
           </div>
         ) : (
           <>

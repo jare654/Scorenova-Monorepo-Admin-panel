@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Users,
   Activity,
@@ -64,6 +65,7 @@ const AnalyticsPage = () => {
   const { toast } = useToast();
   const { token } = useAuth();
   const { totalUsers: totalStudents, loading: studentsLoading } = useAccounts();
+  const [activeTab, setActiveTab] = useState("users");
 
   // ── Overview ────────────────────────────────────────────────────────────────
 
@@ -95,7 +97,7 @@ const AnalyticsPage = () => {
     staleTime: 60_000,
   });
 
-  // ── Users Tab ───────────────────────────────────────────────────────────────
+  // ── Users Tab (Lazy loaded) ───────────────────────────────────────────────────
 
   const { data: packageData } = useQuery({
     queryKey: ["analytics-packages"],
@@ -103,7 +105,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/users-by-package")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && activeTab === "users",
     staleTime: 60_000,
   });
 
@@ -113,7 +115,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/registration-trend")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && activeTab === "users",
     staleTime: 60_000,
   });
 
@@ -123,7 +125,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/peak-hours")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && activeTab === "users",
     staleTime: 60_000,
   });
 
@@ -133,11 +135,11 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/average-study-time")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && (activeTab === "users" || activeTab === "learning"),
     staleTime: 60_000,
   });
 
-  // ── Learning Tab ────────────────────────────────────────────────────────────
+  // ── Learning Tab (Lazy loaded) ────────────────────────────────────────────────
 
   const { data: passFailData } = useQuery({
     queryKey: ["analytics-pass-fail"],
@@ -145,7 +147,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/pass-fail-ratio")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && activeTab === "learning",
     staleTime: 60_000,
   });
 
@@ -155,7 +157,7 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/drop-off-points")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && activeTab === "learning",
     staleTime: 60_000,
   });
 
@@ -165,11 +167,11 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/content-coverage")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && (activeTab === "learning" || activeTab === "content"),
     staleTime: 60_000,
   });
 
-  // ── Content Tab ─────────────────────────────────────────────────────────────
+  // ── Content Tab (Lazy loaded) ─────────────────────────────────────────────────
 
   const { data: difficultyData } = useQuery({
     queryKey: ["analytics-difficulty"],
@@ -177,11 +179,11 @@ const AnalyticsPage = () => {
       apiClient
         .get<any>("/analytics/question-difficulty-stats")
         .then((res) => unwrap<any>(res)),
-    enabled: !!token,
+    enabled: !!token && activeTab === "content",
     staleTime: 60_000,
   });
 
-  // ── Reports Tab ─────────────────────────────────────────────────────────────
+  // ── Reports Tab (Lazy loaded) ─────────────────────────────────────────────────
 
   const { data: flagsData, isLoading: flagsLoading } = useQuery({
     queryKey: ["analytics-flags"],
@@ -193,7 +195,7 @@ const AnalyticsPage = () => {
           const arr = res?.data ?? res;
           return Array.isArray(arr) ? arr : [];
         }),
-    enabled: !!token,
+    enabled: !!token && activeTab === "reports",
     staleTime: 30_000,
   });
 
@@ -323,7 +325,7 @@ const AnalyticsPage = () => {
         />
       </div>
 
-      <Tabs defaultValue="users">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="learning">Learning</TabsTrigger>

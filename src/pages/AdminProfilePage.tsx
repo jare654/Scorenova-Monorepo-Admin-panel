@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   User,
   Mail,
@@ -7,6 +7,7 @@ import {
   Edit,
   LogOut,
   Phone,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/components/auth/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/services/api/client";
+import { useQuery } from "@tanstack/react-query";
 
 interface UserInfo {
   id: string;
@@ -40,22 +42,15 @@ interface UserInfo {
 }
 
 const AdminProfilePage = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const navigate = useNavigate();
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
-  useEffect(() => {
-    const fetchUserInfo = async () => {
-      try {
-        const data = await apiClient.get<any>("/auth/get-user-info");
-        setUserInfo(data);
-      } catch (err) {
-        // Failed to fetch user info
-      }
-    };
-
-    fetchUserInfo();
-  }, []);
+  const { data: userInfo, isLoading } = useQuery<UserInfo>({
+    queryKey: ["admin-user-info"],
+    queryFn: ({ signal }) => apiClient.get<UserInfo>("/auth/get-user-info", signal),
+    enabled: !!token,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const handleLogout = () => {
     logout();

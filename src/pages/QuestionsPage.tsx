@@ -272,20 +272,38 @@ const UploadModal = ({ open, onClose, onSuccess, subjects, streamNameById }: Upl
             </div>
 
             {result.errors?.length > 0 && (
-              <div className="rounded-lg border bg-destructive/5 p-3 max-h-36 overflow-y-auto space-y-1">
-                {result.errors.slice(0, 10).map((e, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs">
-                    <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
-                    <span className="text-muted-foreground">
-                      <span className="font-medium text-foreground">Row {e.row}:</span> {e.reason}
-                    </span>
-                  </div>
-                ))}
-                {result.errors.length > 10 && (
-                  <p className="text-xs text-muted-foreground pl-5">
-                    +{result.errors.length - 10} more errors…
-                  </p>
-                )}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-destructive">Row Failure Breakdown ({result.errors.length}):</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[11px] text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      const text = result.errors.map((e) => `Row ${e.row}: ${e.reason}`).join("\n");
+                      const blob = new Blob([text], { type: "text/plain" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "upload-errors.txt";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download Error Log
+                  </Button>
+                </div>
+                <div className="rounded-lg border bg-destructive/5 p-3 max-h-44 overflow-y-auto space-y-1.5 divide-y divide-destructive/10">
+                  {result.errors.map((e, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs pt-1.5 first:pt-0">
+                      <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-foreground">Row {e.row}:</span>{" "}
+                        <span className="text-destructive/90">{e.reason}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

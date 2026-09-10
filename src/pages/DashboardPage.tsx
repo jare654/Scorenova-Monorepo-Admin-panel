@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/services/api/client";
 import {
@@ -13,10 +13,13 @@ import {
   Flag,
   BellRing,
   ArrowUpRight,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import KPICard from "@/components/KPICard";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import {
   XAxis,
   YAxis,
@@ -61,7 +64,15 @@ const DashboardPage = () => {
   const { questionsByGrade, loading: gradeStatsLoading } = useGradeStats();
 
   // ── Real Subscription / Users by Package data from backend ──
-  const { data: packageData, isLoading: packageLoading } = useQuery<{
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const {
+    data: packageData,
+    isLoading: packageLoading,
+    isError: packageError,
+    error: packageErrorDetails,
+    refetch: refetchPackage,
+  } = useQuery<{
     premium?: number;
     free?: number;
     total?: number;
@@ -69,6 +80,7 @@ const DashboardPage = () => {
     queryKey: ["analytics-users-by-package-dashboard"],
     queryFn: async ({ signal }) => {
       const res = await apiClient.get<any>("/analytics/users-by-package", signal);
+      setLastUpdated(new Date());
       return res?.data ?? res ?? {};
     },
     staleTime: 60_000,
@@ -155,6 +167,22 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-background/60 border text-[11px] text-muted-foreground mr-1">
+            <span>Updated:</span>
+            <span className="font-medium text-foreground">
+              {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 gap-1.5 text-xs shadow-xs"
+            disabled={packageLoading}
+            onClick={() => refetchPackage()}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", packageLoading && "animate-spin")} />
+            Refresh
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -184,6 +212,7 @@ const DashboardPage = () => {
           </Button>
           <Button
             size="sm"
+            variant="outline"
             className="h-9 gap-1.5 text-xs shadow-xs"
             onClick={() => navigate("/notification-test")}
           >
@@ -192,6 +221,23 @@ const DashboardPage = () => {
           </Button>
         </div>
       </div>
+
+      {packageError && (
+        <div className="flex items-center justify-between rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>Failed to sync subscription metrics with backend: {(packageErrorDetails as any)?.message ?? "Connection timeout"}.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs border-destructive/30 hover:bg-destructive/20"
+            onClick={() => refetchPackage()}
+          >
+            Try Again
+          </Button>
+        </div>
+      )}
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -10,6 +10,7 @@ import {
   Users,
   AlertTriangle,
   Radio,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,6 +136,7 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sending, setSending]         = useState(false);
   const [results, setResults]         = useState<SendResult[]>([]);
+  const [displayLimit, setDisplayLimit] = useState(50);
 
   const { data: streams = [] } = useQuery<Stream[]>({
     queryKey: ["streams"],
@@ -185,28 +187,61 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
     setResults([]);
 
     const targets = allUsers.filter((u) => selectedIds.has(u.id));
-    const newResults: SendResult[] = [];
+    const tokenUsers = targets.filter((u) => !!u.fcmId);
+    const noTokenUsers = targets.filter((u) => !u.fcmId);
 
-    for (const user of targets) {
-      if (!user.fcmId) {
-        newResults.push({ userId: user.id, name: user.name, status: "no_token", message: "No FCM token" });
-        continue;
-      }
-      try {
-        await apiClient.post(`/accounts/${user.id}/notify`, { title: title.trim(), body: body.trim() });
-        newResults.push({ userId: user.id, name: user.name, status: "success", message: "Push notification sent" });
-      } catch (err: any) {
-        newResults.push({ userId: user.id, name: user.name, status: "error", message: err?.message ?? "Request failed" });
-      }
-    }
+    const initialResults: SendResult[] = noTokenUsers.map((u) => ({
+      userId: u.id,
+      name: u.name,
+      status: "no_token",
+      message: "No FCM token registered",
+    }));
 
-    setResults(newResults);
+    const settled = await Promise.allSettled(
+      tokenUsers.map(async (user) => {
+        try {
+          await apiClient.post(`/accounts/${user.id}/notify`, {
+            title: title.trim(),
+            body: body.trim(),
+          });
+          return {
+            userId: user.id,
+            name: user.name,
+            status: "success" as const,
+            message: "Push notification sent successfully",
+          };
+        } catch (err: any) {
+          return {
+            userId: user.id,
+            name: user.name,
+            status: "error" as const,
+            message: err?.message ?? "Request failed",
+          };
+        }
+      }),
+    );
+
+    const combined = [
+      ...initialResults,
+      ...settled.map((r, idx) =>
+        r.status === "fulfilled"
+          ? r.value
+          : {
+              userId: tokenUsers[idx].id,
+              name: tokenUsers[idx].name,
+              status: "error" as const,
+              message: (r as PromiseRejectedResult).reason?.message ?? "Failed",
+            },
+      ),
+    ];
+
+    setResults(combined);
     setSending(false);
 
-    const s = newResults.filter((r) => r.status === "success").length;
-    const f = newResults.filter((r) => r.status === "error").length;
-    const n = newResults.filter((r) => r.status === "no_token").length;
-    toast({ title: "Done", description: `${s} sent · ${n} no token · ${f} failed` });
+    const s = combined.filter((r) => r.status === "success").length;
+    const f = combined.filter((r) => r.status === "error").length;
+    const n = combined.filter((r) => r.status === "no_token").length;
+    toast({ title: "Dispatch Complete", description: `${s} sent · ${n} no token · ${f} failed` });
   };
 
   return (
@@ -302,48 +337,62 @@ const IndividualTab = ({ allUsers, isLoading }: { allUsers: User[]; isLoading: b
           ) : filtered.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">No users found</p>
           ) : (
-            filtered.map((user) => {
-              const selected = selectedIds.has(user.id);
-              const hasToken = !!user.fcmId;
-              const streamName = user.streamId ? streamNameById.get(user.streamId) : null;
-              return (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => toggleSelect(user.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-colors text-sm ${
-                    selected
-                      ? "bg-primary/10 border border-primary/30"
-                      : "hover:bg-muted/50 border border-transparent"
-                  }`}
-                >
-                  <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-                    {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{user.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
-                      <span>{user.phoneNumber}</span>
-                      {streamName && (
-                        <span className="text-[10px] bg-muted px-1.5 py-0.2 rounded font-medium text-foreground/80">
-                          {streamName}
-                        </span>
-                      )}
+            <>
+              {filtered.slice(0, displayLimit).map((user) => {
+                const selected = selectedIds.has(user.id);
+                const hasToken = !!user.fcmId;
+                const streamName = user.streamId ? streamNameById.get(user.streamId) : null;
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => toggleSelect(user.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-colors text-sm ${
+                      selected
+                        ? "bg-primary/10 border border-primary/30"
+                        : "hover:bg-muted/50 border border-transparent"
+                    }`}
+                  >
+                    <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
+                      {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {hasToken ? (
-                      <span className="flex items-center gap-1 text-[10px] text-success font-medium">
-                        <Smartphone className="h-3 w-3" /> token
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">no token</span>
-                    )}
-                    <Badge variant="outline" className="text-[10px] py-0">{user.type}</Badge>
-                  </div>
-                </button>
-              );
-            })
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{user.name}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+                        <span>{user.phoneNumber}</span>
+                        {streamName && (
+                          <span className="text-[10px] bg-muted px-1.5 py-0.2 rounded font-medium text-foreground/80">
+                            {streamName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {hasToken ? (
+                        <span className="flex items-center gap-1 text-[10px] text-success font-medium">
+                          <Smartphone className="h-3 w-3" /> token
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">no token</span>
+                      )}
+                      <Badge variant="outline" className="text-[10px] py-0">{user.type}</Badge>
+                    </div>
+                  </button>
+                );
+              })}
+              {filtered.length > displayLimit && (
+                <div className="pt-2 text-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs w-full"
+                    onClick={() => setDisplayLimit((prev) => prev + 50)}
+                  >
+                    Show more ({filtered.length - displayLimit} remaining)
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -476,6 +525,90 @@ const BroadcastTab = () => {
   );
 };
 
+// ─── Reminders Tab ──────────────────────────────────────────────────────────
+
+const RemindersTab = () => {
+  const { toast } = useToast();
+  const [triggering, setTriggering] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const handleTriggerDaily = async () => {
+    setTriggering(true);
+    setResult(null);
+    try {
+      const res = await apiClient.post<any>("/notifications/practice-reminder/send-daily");
+      setResult(res);
+      toast({
+        title: "Reminders Dispatched",
+        description: "Daily practice reminders sent successfully to all active students.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err?.message ?? "Failed to trigger practice reminders.",
+        variant: "destructive",
+      });
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg space-y-5">
+      <div className="rounded-lg border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Clock className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-sm">Automated Practice Reminders</h3>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Triggers daily personalized push notifications and in-app inbox messages to active students
+          who haven't practiced recently, reminding them to maintain their study streak.
+        </p>
+
+        <div className="rounded-md bg-muted/50 border p-3.5 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-foreground">Target Endpoint:</span>
+            <code className="text-[11px] bg-background px-1.5 py-0.5 rounded border">
+              POST /notifications/practice-reminder/send-daily
+            </code>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-foreground">Eligibility:</span>
+            <span className="text-muted-foreground">Students with valid FCM tokens</span>
+          </div>
+        </div>
+
+        <Button
+          onClick={handleTriggerDaily}
+          disabled={triggering}
+          className="w-full gap-2"
+        >
+          {triggering ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Dispatching Daily Reminders...
+            </>
+          ) : (
+            <>
+              <Clock className="h-4 w-4" />
+              Trigger Daily Practice Reminders Now
+            </>
+          )}
+        </Button>
+      </div>
+
+      {result && (
+        <div className="rounded-lg border bg-card p-5 space-y-3">
+          <h4 className="font-semibold text-sm">Execution Summary</h4>
+          <pre className="text-xs bg-muted/40 p-3 rounded-md overflow-x-auto">
+            {JSON.stringify(result, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const NotificationTestPage = () => {
@@ -512,12 +645,18 @@ const NotificationTestPage = () => {
           <TabsTrigger value="broadcast">
             <Radio className="h-3.5 w-3.5 mr-1.5" /> Broadcast
           </TabsTrigger>
+          <TabsTrigger value="reminders">
+            <Clock className="h-3.5 w-3.5 mr-1.5" /> Daily Reminders
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="individual" className="mt-4">
           <IndividualTab allUsers={allUsers} isLoading={isLoading} />
         </TabsContent>
         <TabsContent value="broadcast" className="mt-4">
           <BroadcastTab />
+        </TabsContent>
+        <TabsContent value="reminders" className="mt-4">
+          <RemindersTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -681,35 +681,48 @@ export default function FlaggedQuestionsPage() {
                 rows={3}
                 placeholder="Enter question text (LaTeX math supported e.g. $E=mc^2$)"
               />
+              {editText.trim() && (
+                <div className="rounded-lg border bg-muted/40 p-2.5 text-xs text-foreground">
+                  <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Live LaTeX Preview</div>
+                  <MathText text={editText} />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label>Answer Choices</Label>
               {editOptions.map((opt, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="font-bold text-xs w-6 shrink-0">
-                    {String.fromCharCode(65 + idx)}.
-                  </span>
-                  <Input
-                    value={opt}
-                    onChange={(e) => {
-                      const updated = [...editOptions];
-                      updated[idx] = e.target.value;
-                      setEditOptions(updated);
-                    }}
-                    placeholder={`Choice ${String.fromCharCode(65 + idx)}`}
-                  />
-                  <input
-                    type="radio"
-                    name="correct-choice"
-                    checked={
-                      editCorrectAnswer === opt ||
-                      editCorrectAnswer === String.fromCharCode(65 + idx)
-                    }
-                    onChange={() => setEditCorrectAnswer(opt)}
-                    className="h-4 w-4 text-primary shrink-0 cursor-pointer"
-                    title="Mark as correct answer"
-                  />
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs w-6 shrink-0">
+                      {String.fromCharCode(65 + idx)}.
+                    </span>
+                    <Input
+                      value={opt}
+                      onChange={(e) => {
+                        const updated = [...editOptions];
+                        updated[idx] = e.target.value;
+                        setEditOptions(updated);
+                      }}
+                      placeholder={`Choice ${String.fromCharCode(65 + idx)}`}
+                    />
+                    <input
+                      type="radio"
+                      name="correct-choice"
+                      checked={
+                        editCorrectAnswer === opt ||
+                        editCorrectAnswer === String.fromCharCode(65 + idx)
+                      }
+                      onChange={() => setEditCorrectAnswer(opt)}
+                      className="h-4 w-4 text-primary shrink-0 cursor-pointer"
+                      title="Mark as correct answer"
+                    />
+                  </div>
+                  {opt.trim() && (opt.includes("$") || opt.includes("\\")) && (
+                    <div className="ml-8 text-xs text-muted-foreground bg-muted/30 px-2 py-1 rounded">
+                      <MathText text={opt} />
+                    </div>
+                  )}
                 </div>
               ))}
               <p className="text-[11px] text-muted-foreground">
@@ -726,6 +739,12 @@ export default function FlaggedQuestionsPage() {
                 rows={3}
                 placeholder="Explanation of why this answer is correct..."
               />
+              {editExplanation.trim() && (
+                <div className="rounded-lg border bg-muted/40 p-2.5 text-xs text-foreground">
+                  <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Live Explanation Preview</div>
+                  <MathText text={editExplanation} />
+                </div>
+              )}
             </div>
           </div>
 

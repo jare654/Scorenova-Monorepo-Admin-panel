@@ -77,34 +77,28 @@ function getSubjectColor(name: string): string {
   return SUBJECT_COLORS[key] ?? SUBJECT_COLORS[key.split(" ")[0]] ?? "bg-primary/10 text-primary border-primary/20";
 }
 
-// ─── Deduplicate subjects by base name (English, Aptitude, Civics shared) ─────
+// ─── Deduplicate subjects by base name (stream-independent shared subjects) ──
 function deduplicateSubjects(
   subjects: MockSubject[],
   streamNameById: Map<string, string>,
 ): { name: string; ids: string[]; streamId: string | null }[] {
-  const SHARED = ["english", "aptitude", "civics"];
   const map = new Map<string, { name: string; ids: string[]; streamId: string | null }>();
 
   for (const s of subjects) {
     const baseName = s.name.replace(/\s*\(.*?\)\s*$/, "").trim();
-    const key = baseName.toLowerCase();
-    const isShared = SHARED.some((k) => key.startsWith(k));
 
-    if (isShared) {
-      // Merge all stream variants into one entry, strip suffix, streamId: null
+    // If streamId is null or empty, subject is shared across all curriculum streams
+    if (!s.streamId) {
       if (!map.has(baseName)) {
         map.set(baseName, { name: baseName, ids: [s.id], streamId: null });
       } else {
         map.get(baseName)!.ids.push(s.id);
       }
     } else {
-      // Group by (baseName + streamId) so two subjects with the same name but
-      // different streamIds each get their own card.
-      const groupKey = `${baseName}::${s.streamId ?? ""}`;
+      const groupKey = `${baseName}::${s.streamId}`;
       if (!map.has(groupKey)) {
-        const displayName = s.streamId
-          ? `${baseName} (${streamNameById.get(s.streamId) ?? s.streamId})`
-          : baseName;
+        const streamLabel = streamNameById.get(s.streamId);
+        const displayName = streamLabel ? `${baseName} (${streamLabel})` : baseName;
         map.set(groupKey, { name: displayName, ids: [s.id], streamId: s.streamId });
       } else {
         map.get(groupKey)!.ids.push(s.id);

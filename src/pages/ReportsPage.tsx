@@ -96,16 +96,18 @@ const ReportsPage = () => {
   const [typeFilter, setType]       = useState<string>("all");
   const [page, setPage]             = useState(1);
   const [selected, setSelected]     = useState<Report | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const perPage = 20;
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["reports", statusFilter, typeFilter, page],
+    queryKey: ["reports", statusFilter, typeFilter, search, page],
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({ page: String(page), limit: String(perPage) });
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (typeFilter   !== "all") params.set("type", typeFilter);
+      if (search.trim()) params.set("search", search.trim());
       return apiClient.get<any>(`/reports?${params}`, signal);
     },
   });
@@ -114,15 +116,8 @@ const ReportsPage = () => {
   const total: number     = data?.total ?? 0;
   const totalPages: number = data?.totalPages ?? 1;
 
-  // ── Search filter (client-side on current page) ────────────────────────────
-  const filtered = search
-    ? reports.filter(
-        (r) =>
-          (r.studentName || "").toLowerCase().includes(search.toLowerCase()) ||
-          (r.studentPhone || "").includes(search) ||
-          (r.description || "").toLowerCase().includes(search.toLowerCase()),
-      )
-    : reports;
+  // Server-side filtered data across entire dataset
+  const filtered = reports;
 
   // ── Status mutation ────────────────────────────────────────────────────────
 
@@ -310,20 +305,30 @@ const ReportsPage = () => {
               {/* Screenshot */}
               {selected.screenshotUrl && (
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-muted-foreground">Screenshot</p>
-                  <a
-                    href={selected.screenshotUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Attached Screenshot</p>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage(selected.screenshotUrl!)}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      View Full Size
+                    </button>
+                  </div>
+                  <div
+                    onClick={() => setPreviewImage(selected.screenshotUrl!)}
+                    className="cursor-pointer group relative rounded-md overflow-hidden border bg-muted/30"
                   >
                     <img
                       src={selected.screenshotUrl}
                       alt="screenshot"
-                      className="rounded-md border max-h-48 object-contain w-full bg-muted"
+                      className="rounded-md max-h-56 object-contain w-full transition-transform group-hover:scale-[1.02]"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
-                  </a>
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                      Click to zoom
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -350,6 +355,24 @@ const ReportsPage = () => {
               <p className="text-xs text-muted-foreground">
                 Reported {new Date(selected.createdAt).toLocaleString()}
               </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Screenshot Lightbox Modal */}
+      <Dialog open={!!previewImage} onOpenChange={(v) => !v && setPreviewImage(null)}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] p-2 flex flex-col items-center justify-center">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Screenshot Preview</DialogTitle>
+          </DialogHeader>
+          {previewImage && (
+            <div className="relative w-full h-full flex items-center justify-center p-2">
+              <img
+                src={previewImage}
+                alt="Report Screenshot"
+                className="max-h-[80vh] w-auto max-w-full rounded-md object-contain shadow-md"
+              />
             </div>
           )}
         </DialogContent>

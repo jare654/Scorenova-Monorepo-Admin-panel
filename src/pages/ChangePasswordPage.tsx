@@ -139,7 +139,7 @@ const ChangePasswordPage = () => {
               type={showNew ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter new password"
+              placeholder="Enter new password (min. 8 characters)"
             />
             <button
               type="button"
@@ -149,12 +149,39 @@ const ChangePasswordPage = () => {
               {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
+
+          {/* Password strength meter */}
+          {password && (
+            <div className="mt-2 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Strength:</span>
+                <span className="font-semibold" style={{
+                  color: password.length < 8 ? "#ef4444" : /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{10,}$/.test(password) ? "#22c55e" : "#f59e0b"
+                }}>
+                  {password.length < 8 ? "Too Short" : /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{10,}$/.test(password) ? "Strong" : "Medium"}
+                </span>
+              </div>
+              <div className="flex gap-1 h-1.5 w-full">
+                <div className={`flex-1 rounded-full ${password.length >= 6 ? (password.length < 8 ? "bg-destructive" : "bg-warning") : "bg-muted"}`} />
+                <div className={`flex-1 rounded-full ${password.length >= 8 ? (/[A-Z]/.test(password) && /\d/.test(password) ? "bg-warning" : "bg-muted") : "bg-muted"}`} />
+                <div className={`flex-1 rounded-full ${password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password) ? "bg-success" : "bg-muted"}`} />
+                <div className={`flex-1 rounded-full ${password.length >= 10 && /[A-Z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password) ? "bg-success" : "bg-muted"}`} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Confirm Password */}
         <div>
-          <Label>Confirm Password</Label>
-          <div className="relative">
+          <div className="flex items-center justify-between">
+            <Label>Confirm Password</Label>
+            {confirmPassword && (
+              <span className={`text-xs font-medium ${password === confirmPassword ? "text-success" : "text-destructive"}`}>
+                {password === confirmPassword ? "✓ Passwords match" : "✗ Do not match"}
+              </span>
+            )}
+          </div>
+          <div className="relative mt-1.5">
             <Input
               type={showConfirm ? "text" : "password"}
               value={confirmPassword}

@@ -20,6 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Link } from "react-router-dom";
 import {
   Plus,
   AlertTriangle,
@@ -30,6 +31,7 @@ import {
   BarChart2,
   Crown,
   ChevronDown,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -238,23 +240,23 @@ const PremiumSettingsSection = () => {
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      apiClient.put("/settings/premium", {
-        data: {
-          monthlyPrice:          monthlyPrice          === "" ? null : Number(monthlyPrice),
-          monthlyDurationDays:   monthlyDurationDays   === "" ? null : Number(monthlyDurationDays),
-          quarterlyPrice:        quarterlyPrice        === "" ? null : Number(quarterlyPrice),
-          quarterlyDurationDays: quarterlyDurationDays === "" ? null : Number(quarterlyDurationDays),
-          annualPrice:           annualPrice           === "" ? null : Number(annualPrice),
-          annualDurationDays:    annualDurationDays    === "" ? null : Number(annualDurationDays),
-          currency,
-          telegramSupport,
-          benefitsDescription,
-          freeSubjectId: freeSubjectId || null,
-        },
+      apiClient.put("/settings/plans", {
+        monthlyPrice:          monthlyPrice          === "" ? null : Number(monthlyPrice),
+        monthlyDurationDays:   monthlyDurationDays   === "" ? null : Number(monthlyDurationDays),
+        quarterlyPrice:        quarterlyPrice        === "" ? null : Number(quarterlyPrice),
+        quarterlyDurationDays: quarterlyDurationDays === "" ? null : Number(quarterlyDurationDays),
+        annualPrice:           annualPrice           === "" ? null : Number(annualPrice),
+        annualDurationDays:    annualDurationDays    === "" ? null : Number(annualDurationDays),
+        currency,
+        telegramSupport,
+        benefitsDescription,
+        freeSubjectId: freeSubjectId || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings-premium"] });
-      toast({ title: "Success", description: "Premium settings saved." });
+      queryClient.invalidateQueries({ queryKey: ["settings-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-plans"] });
+      toast({ title: "Success", description: "Subscription plans saved successfully." });
     },
     onError: () =>
       toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" }),
@@ -448,8 +450,17 @@ const SettingsPage = () => {
 
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
-  const [admins, setAdmins]               = useState<any[]>([]);
-  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: admins = [], isLoading: loadingAdmins } = useQuery<any[], Error>({
+    queryKey: ["admin-accounts"],
+    queryFn: async ({ signal }) => {
+      const json = await apiClient.get<any>("/accounts/get-accounts", signal);
+      const list = json?.data || [];
+      return list.filter((u: any) => u.type !== "student");
+    },
+    staleTime: 60 * 1000,
+  });
 
   const [addAdminOpen, setAddAdminOpen]   = useState(false);
   const [adminName, setAdminName]         = useState("");
@@ -458,31 +469,7 @@ const SettingsPage = () => {
   const [adminPassword, setAdminPassword] = useState("");
   const [adminRole, setAdminRole]         = useState("admin");
   const [showPassword, setShowPassword]   = useState(false);
-  const [addLoading, setAddLoading]       = useState(false);
-  const [formErrors, setFormErrors]       = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    const fetchAdmins = async () => {
-      setLoadingAdmins(true);
-      try {
-        const json = await apiClient.get<any>("/accounts/get-accounts");
-        const adminList = (json?.data || []).filter((u: any) => u.type !== "student");
-        setAdmins(adminList);
-      } catch {
-        // Failed to fetch admins
-      } finally {
-        setLoadingAdmins(false);
-      }
-    };
-    fetchAdmins();
-  }, []);
-
-  const handleSave = () => {
-    toast({
-      title: "Settings Saved",
-      description: "Your changes have been saved successfully.",
-    });
-  };
+  const [formErrors, setFormErrors]       = useState<Record<string, string>>({});
 
   const resetAddAdminForm = () => {
     setAdminName("");
@@ -495,15 +482,54 @@ const SettingsPage = () => {
   };
 
   const validateAdminForm = () => {
-    const errors: Record<string, boolean> = {};
-    if (!adminName.trim()) errors.name = true;
-    if (!adminPhone.trim() || adminPhone === "+251") errors.phone = true;
-    if (!adminPassword.trim() || adminPassword.length < 8) errors.password = true;
+    const errors: Record<string, string> = {};
+    if (!adminName.trim() || adminName.trim().length < 2) {
+      errors.name = "Full name must be at least 2 characters";
+    }
+    const cleanPhone = adminPhone.replace(/\D/g, "");
+    if (!cleanPhone || cleanPhone.length < 9) {
+      errors.phone = "Valid phone number required (e.g. +251 9XXXXXXXX)";
+    }
+    if (!adminPassword || adminPassword.length < 8) {
+      errors.password = "Password must be at least 8 characters";
+    }
+    if (adminEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail.trim())) {
+      errors.email = "Valid email address required";
+    }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleAddAdmin = async () => {
+  const createAdminMutation = useMutation({
+    mutationFn: async () => {
+      const phoneDigits = adminPhone.replace("+251", "").replace(/\D/g, "");
+      return apiClient.post<any>("/accounts/create-admin", {
+        name: adminName.trim(),
+        phoneNumber: phoneDigits,
+        password: adminPassword,
+        email: adminEmail.trim() || undefined,
+        type: adminRole,
+      });
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-accounts"] });
+      toast({
+        title: "Admin Created",
+        description: `${adminName} has been added as an admin successfully.`,
+      });
+      setAddAdminOpen(false);
+      resetAddAdminForm();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create admin.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddAdmin = () => {
     if (!validateAdminForm()) {
       toast({
         title: "Validation Error",
@@ -512,33 +538,14 @@ const SettingsPage = () => {
       });
       return;
     }
-    setAddLoading(true);
-    try {
-      const phoneDigits = adminPhone.replace("+251", "");
-      const data = await apiClient.post<any>("/accounts/create-admin", {
-        name: adminName,
-        phoneNumber: phoneDigits,
-        password: adminPassword,
-        email: adminEmail || undefined,
-      });
+    createAdminMutation.mutate();
+  };
 
-      toast({
-        title: "Admin Created",
-        description: `${adminName} has been added as an admin successfully.`,
-      });
-
-      setAdmins((prev) => [data, ...prev]);
-      setAddAdminOpen(false);
-      resetAddAdminForm();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create admin.",
-        variant: "destructive",
-      });
-    } finally {
-      setAddLoading(false);
-    }
+  const handleSave = () => {
+    toast({
+      title: "Settings Saved",
+      description: "Your settings have been saved successfully.",
+    });
   };
 
   return (
@@ -591,6 +598,23 @@ const SettingsPage = () => {
 
         {/* Admin Roles */}
         <TabsContent value="roles" className="space-y-6">
+          <div className="flex items-center justify-between p-4 rounded-xl border bg-primary/5 border-primary/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <Shield className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold">Roles & Granular Permissions</h4>
+                <p className="text-xs text-muted-foreground">Configure custom roles, system capabilities, and feature-level access policies.</p>
+              </div>
+            </div>
+            <Link to="/roles-permissions">
+              <Button variant="outline" size="sm">
+                Manage Roles & Permissions
+              </Button>
+            </Link>
+          </div>
+
           <div className="bg-card rounded-lg border shadow-sm">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold">Admin Users</h3>
@@ -753,12 +777,12 @@ const SettingsPage = () => {
                 setAddAdminOpen(false);
                 resetAddAdminForm();
               }}
-              disabled={addLoading}
+              disabled={createAdminMutation.isPending}
             >
               Cancel
             </Button>
-            <Button onClick={handleAddAdmin} disabled={addLoading}>
-              {addLoading ? (
+            <Button onClick={handleAddAdmin} disabled={createAdminMutation.isPending}>
+              {createAdminMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Creating...

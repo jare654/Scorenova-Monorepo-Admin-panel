@@ -20,6 +20,10 @@ import AdminProfilePage from "@/pages/AdminProfilePage";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import EditProfilePage from "@/pages/EditProfilePage";
 import AIScannerPage from "@/pages/AIScannerPage";
+import RolesPermissionsPage from "@/pages/RolesPermissionsPage";
+import FeedbackPage from "@/pages/FeedbackPage";
+import ExamSessionsPage from "@/pages/ExamSessionsPage";
+import DataMaintenancePage from "@/pages/DataMaintenancePage";
 
 // Mock ResizeObserver
 global.ResizeObserver = class {
@@ -97,5 +101,21 @@ describe("Page rendering tests", () => {
 
   it("renders NotificationTestPage without crashing", () => {
     expect(() => render(wrap(<NotificationTestPage />))).not.toThrow();
+  });
+
+  it("renders RolesPermissionsPage without crashing", () => {
+    expect(() => render(wrap(<RolesPermissionsPage />))).not.toThrow();
+  });
+
+  it("renders FeedbackPage without crashing", () => {
+    expect(() => render(wrap(<FeedbackPage />))).not.toThrow();
+  });
+
+  it("renders ExamSessionsPage without crashing", () => {
+    expect(() => render(wrap(<ExamSessionsPage />))).not.toThrow();
+  });
+
+  it("renders DataMaintenancePage without crashing", () => {
+    expect(() => render(wrap(<DataMaintenancePage />))).not.toThrow();
   });
 });

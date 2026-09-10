@@ -29,6 +29,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { apiClient } from "@/services/api/client";
+import { useAuth } from "@/components/auth/context/AuthContext";
 
 type FormValues = {
   name: string;
@@ -41,6 +42,7 @@ type FormValues = {
 const EditProfilePage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { updateUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
@@ -83,26 +85,23 @@ const EditProfilePage = () => {
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
     try {
+      const cleanDigits = values.phoneNumber.replace(/\D/g, "");
+      const normalizedPhone = cleanDigits.startsWith("251") ? cleanDigits.slice(3) : cleanDigits;
+
       const data = await apiClient.post<any>("/accounts/update-profile", {
-        name: values.name,
-        email: values.email,
-        phoneNumber: values.phoneNumber,
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phoneNumber: normalizedPhone,
         gender: values.gender,
-        address: values.address || undefined,
+        address: values.address?.trim() || undefined,
         isActive: true,
       });
 
-      // Proactively update cached user in localStorage
-      const cachedUser = localStorage.getItem("user");
-      if (cachedUser) {
-        try {
-          const userObj = JSON.parse(cachedUser);
-          const updatedUserObj = { ...userObj, ...data };
-          localStorage.setItem("user", JSON.stringify(updatedUserObj));
-        } catch {
-          // ignore
-        }
-      }
+      // Update global auth context
+      updateUser({
+        name: data?.name || values.name.trim(),
+        email: data?.email || values.email.trim(),
+      });
 
       toast({
         title: "Profile Updated",

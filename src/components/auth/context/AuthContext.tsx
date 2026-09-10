@@ -11,6 +11,7 @@ type AuthContextType = {
     password: string,
   ) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
+  updateUser: (updatedUser: Partial<AdminUser>) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -92,6 +93,16 @@ if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
       /* noop */
     }
   };
+
+  const updateUser = (updatedUser: Partial<AdminUser>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updatedUser };
+      localStorage.setItem("user", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   useEffect(() => {
   const handleTokenRefreshed = (e: Event) => {
     const detail = (e as CustomEvent).detail;
@@ -103,7 +114,7 @@ if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
 
   return (
     <AuthContext.Provider
-      value={{ user, token, initialized, login, logout }}
+      value={{ user, token, initialized, login, logout, updateUser }}
     >
       {children}
     </AuthContext.Provider>

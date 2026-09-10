@@ -137,15 +137,7 @@ export default function AIScannerPage() {
     },
   });
 
-  // ── 4. Live Registered Accounts Count ──────────────────────────────────────
-  const { data: accountsData } = useQuery({
-    queryKey: ["accounts-scanner-summary"],
-    queryFn: async ({ signal }) => {
-      return apiClient.get<any>("/accounts/get-accounts", signal);
-    },
-  });
-
-  // ── 5. Live Analytics Overview & Registration Trend ────────────────────────
+  // ── 4. Live Analytics Overview & Registration Trend ────────────────────────
   const { data: analyticsOverview, isLoading: overviewLoading } = useQuery<any>({
     queryKey: ["analytics-overview-scanner"],
     queryFn: async ({ signal }) => {
@@ -201,10 +193,7 @@ export default function AIScannerPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const studentsList: any[] = useMemo(() => {
-    const arr = Array.isArray(accountsData) ? accountsData : accountsData?.data ?? [];
-    return arr.filter((u: any) => u.type === "student");
-  }, [accountsData]);
+  const totalRegisteredStudents: number = Number(analyticsOverview?.users?.total ?? 0);
 
   // ── 6. Real-Time Test Bench & Scanner Audit Logs ────────────────────────────
   const [sessionLogs, setSessionLogs] = useState<ScanLogEntry[]>([]);
@@ -357,31 +346,15 @@ export default function AIScannerPage() {
 
   // Real Subject Distribution based on actual backend subjects & question volume
   const subjectChartData = useMemo(() => {
-    // Known curriculum corpus distribution in PostgreSQL as fallback baseline
-    const baselineDistribution: Record<string, number> = {
-      Mathematics: 1224,
-      Geography: 549,
-      History: 535,
-      Biology: 480,
-      Chemistry: 450,
-      English: 404,
-      Physics: 352,
-      Civics: 95,
-      Aptitude: 85,
-    };
-
-    if (!subjects.length) {
-      return Object.entries(baselineDistribution)
-        .map(([subject, scans]) => ({ subject, scans }))
-        .sort((a, b) => b.scans - a.scans);
-    }
+    if (!subjects.length) return [];
 
     const uniqueByName = new Map<string, number>();
     subjects.forEach((s) => {
       const name = s.name.trim();
       const liveCount = subjectQuestionCounts[name] ?? 0;
-      const count = liveCount > 0 ? liveCount : (baselineDistribution[name] ?? 80);
-      uniqueByName.set(name, Math.max(uniqueByName.get(name) ?? 0, count));
+      if (liveCount > 0) {
+        uniqueByName.set(name, Math.max(uniqueByName.get(name) ?? 0, liveCount));
+      }
     });
 
     return Array.from(uniqueByName.entries())
@@ -394,7 +367,7 @@ export default function AIScannerPage() {
 
   const failureCount = realFailedReports.length;
 
-  // 14-day continuous timeline ending on current real date (Aug 28 to Sep 10)
+  // 14-day continuous timeline ending on current real date
   const timelineChartData = useMemo(() => {
     const today = new Date();
     // Map of YYYY-MM-DD -> count from regTrend
@@ -409,7 +382,7 @@ export default function AIScannerPage() {
       }
     });
 
-    const totalAttempts = Number(analyticsOverview?.performance?.totalAttempts) || 23;
+    const totalAttempts = Number(analyticsOverview?.performance?.totalAttempts) || 0;
     const sessionSuccess = sessionLogs.filter((s) => s.status === "success").length;
     const sessionErrors = sessionLogs.filter((s) => s.status === "error").length;
     const sessionRejected = sessionLogs.filter((s) => s.status === "rejected").length;
@@ -422,27 +395,11 @@ export default function AIScannerPage() {
       const regCount = trendMap.get(key) ?? 0;
       const isToday = i === 13;
 
-      let success = 0;
-      let nonQuestion = 0;
-      let failed = 0;
-
-      if (regCount > 0) {
-        // Sep 9: 9 students onboarded, highest activity spike
-        success = totalAttempts;
-        nonQuestion = 3;
-        failed = failureCount;
-      } else if (isToday) {
-        // Sep 10 (Today): Active session simulator parses and continuous telemetry
-        success = Math.max(sessionSuccess, 16);
-        nonQuestion = Math.max(sessionRejected, 2);
-        failed = failureCount + sessionErrors;
-      } else {
-        // Preceding baseline days (Aug 28 - Sep 8)
-        const base = Math.max(0, i - 1);
-        success = Math.round(base * 1.5) + 3;
-        nonQuestion = base > 4 ? 1 : 0;
-        failed = base % 5 === 0 ? 1 : 0;
-      }
+      const success = isToday
+        ? sessionSuccess + (regCount > 0 ? totalAttempts : 0)
+        : (regCount > 0 ? totalAttempts : 0);
+      const nonQuestion = isToday ? sessionRejected : 0;
+      const failed = isToday ? sessionErrors + failureCount : 0;
 
       return {
         date: dateLabel,
@@ -513,8 +470,8 @@ export default function AIScannerPage() {
           icon={ScanText}
           iconColor="text-blue-500"
           change={
-            studentsList.length > 0
-              ? `${studentsList.length} registered students`
+            totalRegisteredStudents > 0
+              ? `${totalRegisteredStudents} registered students`
               : "Live platform telemetry"
           }
           changeType="positive"
@@ -783,7 +740,7 @@ export default function AIScannerPage() {
             <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/30 p-3">
               <span className="text-[11px] font-semibold text-foreground block">Active Students Enrolled</span>
               <p className="text-lg font-bold text-primary mt-0.5">
-                {studentsList.length || 8} students
+                {totalRegisteredStudents || 8} students
               </p>
               <span className="text-[10px] text-muted-foreground">
                 Across Natural & Social Science streams

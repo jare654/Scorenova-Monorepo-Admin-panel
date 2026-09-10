@@ -204,36 +204,64 @@ const AddQuestionPage = () => {
       .catch(() => toast({ title: "Error", description: "Failed to load streams.", variant: "destructive" }));
   }, [toast]);
 
-  // ── Load subjects when stream changes
+  // ── Load subjects when stream changes (with race condition prevention)
   useEffect(() => {
     if (!streamId) {
       setSubjects([]);
       if (!isEditMode) { setSubjectId(""); setTopicId(""); }
       return;
     }
+    let cancelled = false;
     fetchSubjects(streamId)
       .then((data) => {
+        if (cancelled) return;
         setSubjects(data);
         // Don't clear subjectId if we have a preselected one — the preselect effect will set it
         if (!isEditMode && !preselectedSubjectId) { setSubjectId(""); setTopicId(""); }
       })
-      .catch(() => toast({ title: "Error", description: "Failed to load subjects.", variant: "destructive" }));
+      .catch(() => {
+        if (!cancelled) toast({ title: "Error", description: "Failed to load subjects.", variant: "destructive" });
+      });
+    return () => { cancelled = true; };
   }, [streamId, isEditMode, prefilled, preselectedSubjectId, toast]);
 
-  // ── Load topics when subject changes
+  // ── Load topics when subject changes (with race condition prevention)
   useEffect(() => {
     if (!subjectId) {
       setTopics([]);
       if (!isEditMode || prefilled) setTopicId("");
       return;
     }
+    let cancelled = false;
     fetchTopics(subjectId)
       .then((data) => {
+        if (cancelled) return;
         setTopics(data);
         if (!isEditMode || prefilled) setTopicId("");
       })
-      .catch(() => toast({ title: "Error", description: "Failed to load topics.", variant: "destructive" }));
+      .catch(() => {
+        if (!cancelled) toast({ title: "Error", description: "Failed to load topics.", variant: "destructive" });
+      });
+    return () => { cancelled = true; };
   }, [subjectId, isEditMode, prefilled, toast]);
+
+  // ── Unsaved changes tracking & warning
+  const isDirty = Boolean(
+    questionText.trim() ||
+    options.some((o) => o.trim()) ||
+    explanation.trim()
+  );
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty && !loading) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty, loading]);
 
   // ── Prefill form when editing
   useEffect(() => {
@@ -445,13 +473,20 @@ const AddQuestionPage = () => {
     }
   };
 
+  const handleCancel = () => {
+    if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to leave?")) {
+      return;
+    }
+    navigate("/questions");
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{isEditMode ? "Edit Question" : "Add New Question"}</h2>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate("/questions")}>
+          <Button variant="outline" onClick={handleCancel}>
             <X className="h-4 w-4 mr-1" /> Cancel
           </Button>
           <Button variant="outline" onClick={() => setPreviewOpen(true)}>

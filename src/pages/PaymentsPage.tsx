@@ -381,16 +381,28 @@ const PaymentsPage = () => {
     },
   });
 
-  // Fetch premium settings for price info
+  // Fetch premium settings for price info and plans
   const { data: settingsRaw } = useQuery({
     queryKey: ["settings-premium"],
     queryFn: ({ signal }) => apiClient.get<any>("/settings/premium", signal),
   });
 
+  const { data: plansData } = useQuery({
+    queryKey: ["settings-plans"],
+    queryFn: ({ signal }) => apiClient.get<any>("/settings/plans", signal),
+  });
+
   const settings = settingsRaw?.data ?? settingsRaw ?? {};
-  const currency = settings.currency ?? "ETB";
-  // Support both old field name (premiumPrice) and new (monthlyPrice)
+  const currency = plansData?.currency ?? settings.currency ?? "ETB";
   const monthlyPrice = Number(settings.monthlyPrice ?? settings.premiumPrice ?? 0);
+
+  const planPriceMap: Record<string, number> = useMemo(() => {
+    const map: Record<string, number> = {};
+    (plansData?.plans ?? []).forEach((p: any) => {
+      map[p.id.toLowerCase()] = Number(p.price) || 0;
+    });
+    return map;
+  }, [plansData]);
 
   const now = new Date();
   const activeCount  = premiumUsersRaw.filter((u) =>
@@ -398,15 +410,11 @@ const PaymentsPage = () => {
   ).length;
   const expiredCount = premiumUsersRaw.length - activeCount;
 
-  // Estimated revenue: sum per user based on plan multiplier
-  const PLAN_MULTIPLIERS: Record<string, number> = {
-    monthly: 1, Monthly: 1,
-    quarterly: 3, Quarterly: 3,
-    annual: 12, Annual: 12,
-  };
+  // Real estimated revenue based on live backend configured plan pricing
   const totalRevenue = premiumUsersRaw.reduce((sum, u) => {
-    const mult = PLAN_MULTIPLIERS[u.premiumPlan ?? ""] ?? 1;
-    return sum + monthlyPrice * mult;
+    const planKey = (u.premiumPlan ?? "").toLowerCase();
+    const price = planPriceMap[planKey] ?? (planKey.includes("annual") ? 3000 : planKey.includes("quarter") ? 900 : monthlyPrice);
+    return sum + price;
   }, 0);
 
   // Count by plan

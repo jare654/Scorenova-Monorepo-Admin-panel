@@ -15,6 +15,10 @@ import {
   LogOut,
   Sparkles,
   ScanText,
+  GraduationCap,
+  MessageSquare,
+  Shield,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,13 +62,17 @@ const navGroups: NavGroup[] = [
     label: "Management",
     items: [
       { title: "Students",         path: "/users",            icon: Users },
+      { title: "Exam Sessions",    path: "/exam-sessions",    icon: GraduationCap },
       { title: "Payments",         path: "/payments",         icon: CreditCard },
+      { title: "Student Feedback", path: "/feedback",         icon: MessageSquare },
       { title: "User Reports",     path: "/reports",          icon: MessageSquareWarning },
     ],
   },
   {
     label: "System",
     items: [
+      { title: "Roles & Permissions", path: "/roles-permissions", icon: Shield },
+      { title: "Data Maintenance", path: "/data-maintenance", icon: Wrench },
       { title: "Settings",         path: "/settings",         icon: Settings },
       { title: "Push Notifs",      path: "/notification-test",icon: BellRing },
     ],
