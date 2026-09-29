@@ -1,12 +1,9 @@
 services:
   - type: web
-    name: scorenova-admin
-    runtime: static
+    name: scorenova-admin-panel
+    env: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
-    envVars:
-      - key: VITE_API_URL
-        value: https://learnova-backend-05vf.onrender.com
     routes:
       - type: rewrite
         source: /*
